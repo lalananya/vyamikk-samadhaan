@@ -24,6 +24,7 @@ export interface BootResult {
 export class BootSequence {
   private static instance: BootSequence;
   private isBooted = false;
+  private isExecuting = false;
   private bootResult: BootResult | null = null;
 
   static getInstance(): BootSequence {
@@ -43,6 +44,22 @@ export class BootSequence {
       return this.bootResult;
     }
 
+    // If already executing, wait for completion
+    if (this.isExecuting) {
+      console.log("🚀 BootSequence: Already executing, waiting for completion");
+      return new Promise((resolve) => {
+        const checkComplete = () => {
+          if (!this.isExecuting && this.isBooted) {
+            resolve(this.bootResult!);
+          } else {
+            setTimeout(checkComplete, 100);
+          }
+        };
+        checkComplete();
+      });
+    }
+
+    this.isExecuting = true;
     console.log("🚀 BootSequence: Starting boot sequence");
 
     try {
@@ -54,6 +71,7 @@ export class BootSequence {
         const result = { step: "ROUTE_LOGIN", target: "/login" };
         this.bootResult = result;
         this.isBooted = true;
+        this.isExecuting = false;
         console.log("🔍 boot_step: ROUTE_LOGIN");
         return result;
       }
@@ -79,6 +97,7 @@ export class BootSequence {
 
         this.bootResult = result;
         this.isBooted = true;
+        this.isExecuting = false;
         return result;
       }
 
@@ -88,12 +107,14 @@ export class BootSequence {
 
       this.bootResult = step3;
       this.isBooted = true;
+      this.isExecuting = false;
       return step3;
     } catch (error) {
       console.error("💥 BootSequence error:", error);
       const result = { step: "ROUTE_LOGOUT", target: "/login" };
       this.bootResult = result;
       this.isBooted = true;
+      this.isExecuting = false;
       console.log("🔍 boot_step: ROUTE_LOGOUT (error)");
       return result;
     }
@@ -361,6 +382,7 @@ export class BootSequence {
 
   reset(): void {
     this.isBooted = false;
+    this.isExecuting = false;
     this.bootResult = null;
   }
 }

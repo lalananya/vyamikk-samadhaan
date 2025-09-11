@@ -149,10 +149,10 @@ class AppStateManager {
   async clearAllData(): Promise<void> {
     this.user = null;
     this.setAuthState(false, "clear_all_data");
+    this.stopHealthChecks();
     try {
       await AsyncStorage.clear();
       // Also clear token
-      const { clearToken } = await import("../session");
       await clearToken();
       this.notifyListeners();
     } catch (error) {
@@ -248,7 +248,7 @@ class AppStateManager {
     }
   }
 
-  private getApiBase(): string {
+  getApiBase(): string {
     try {
       const { API_BASE } = require("../api");
       return API_BASE;
@@ -290,6 +290,7 @@ class AppStateManager {
     if (this.healthCheckInterval) {
       return; // Already running
     }
+    console.log("🏥 Starting health checks with 30s interval");
     this.healthCheckInterval = setInterval(async () => {
       try {
         const controller = new AbortController();
@@ -301,14 +302,17 @@ class AppStateManager {
         if (!response.ok) {
           console.warn("Health check failed:", response.status);
         }
-      } catch (error) {
-        console.warn("Health check error:", error);
+      } catch (error: any) {
+        if (error?.name !== "AbortError") {
+          console.warn("Health check error:", error);
+        }
       }
     }, 30000); // 30 seconds
   }
 
   stopHealthChecks(): void {
     if (this.healthCheckInterval) {
+      console.log("🏥 Stopping health checks");
       clearInterval(this.healthCheckInterval);
       this.healthCheckInterval = null;
     }

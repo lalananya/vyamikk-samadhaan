@@ -103,7 +103,9 @@ const RootRouterGuard: React.FC = () => {
 
   useEffect(() => {
     console.log("🚀 RootRouterGuard: useEffect triggered");
-    executeBootSequence();
+    if (!bootPromiseRef.current) {
+      executeBootSequence();
+    }
   }, []); // Only run once on mount
 
   // Show blocking splash during boot sequence

@@ -198,9 +198,7 @@ class PunchService {
     }
   }
 
-  async getCurrentShift(
-    employeeId: string,
-  ): Promise<{
+  async getCurrentShift(employeeId: string): Promise<{
     punchInTime: string;
     punchOutTime?: string;
     duration?: number;

@@ -11,6 +11,11 @@
     "ios": {
       "supportsTablet": true
     },
+    "statusBar": {
+      "style": "light",
+      "translucent": true,
+      "backgroundColor": "transparent"
+    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -32,16 +37,21 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#000000"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
     },
+    "navigation": {
+      "persistNavigationState": false
+    },
     "extra": {
-      "apiUrl": "http://192.168.29.242:4000"
+      "apiUrl": "http://192.168.29.242:4000",
+      "adminPhones": []
     }
   }
 }

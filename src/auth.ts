@@ -1,6 +1,6 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from "expo-secure-store";
 
-const TOKEN_KEY = 'auth_token';
+const TOKEN_KEY = "auth_token";
 let memoryToken: string | null = null; // fallback for web/dev
 
 export async function setToken(token: string) {

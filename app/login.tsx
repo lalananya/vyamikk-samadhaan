@@ -1,50 +1,118 @@
-// app/login.tsx
-import React, { useState } from "react";
-import { View, Text, TextInput, Button, ActivityIndicator, Alert, StyleSheet } from "react-native";
+import { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+} from "react-native";
 import { router } from "expo-router";
-import { API_BASE } from "../src/config";
-import { setToken } from "../src/auth";
+import { loginReq, API_BASE, pingApi, normalizePhone } from "../src/api";
+import { setToken } from "../src/session";
+import { appState } from "../src/state/AppState";
+import { analytics } from "../src/analytics/AnalyticsService";
 
 export default function Login() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
+  const [stat, setStat] = useState<any>(null);
 
-  async function submit() {
-    if (!phone.trim()) return Alert.alert("Enter phone number");
-    setLoading(true);
+  useEffect(() => {
+    (async () => {
+      const apiStat = await pingApi();
+      setStat(apiStat);
+
+      // Print diagnostics
+      console.log("🔍 App Diagnostics:");
+      console.log("📱 buildCommit:", __DEV__ ? "dev" : "production");
+      console.log("🌍 env:", process.env.NODE_ENV || "development");
+      console.log("🔗 apiBase:", API_BASE);
+      console.log("📦 bundleUrlHost:", __DEV__ ? "metro" : "production");
+      console.log("📊 API Status:", apiStat);
+    })();
+  }, []);
+
+  async function onClearAppState() {
     try {
-      const res = await fetch(`${API_BASE}/login`, {
+      await appState.clearAllData();
+      Alert.alert("Success", "App state cleared. Please restart the app.");
+    } catch (error) {
+      Alert.alert("Error", "Failed to clear app state");
+    }
+  }
+
+  async function onLogin() {
+    if (loading || !phone || !otp) return;
+    setLoading(true);
+
+    try {
+      const phone10 = normalizePhone(phone);
+
+      // Step 1: Get OTP token
+      const loginResp = await loginReq({ phone: phone10 });
+      const { otpToken } = loginResp;
+
+      // Step 2: Verify OTP
+      const verifyResp = await fetch(`${API_BASE}/auth/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: phone.trim(), otp: otp.trim() || undefined }),
+        body: JSON.stringify({ otpToken, code: otp }),
       });
 
-      let data: any = null;
-      try {
-        data = await res.json();
-      } catch {
-        // ignore JSON parse errors; we'll handle via res.ok below
+      if (!verifyResp.ok) {
+        const errorData = await verifyResp.json();
+        throw new Error(
+          errorData.error?.message || `HTTP ${verifyResp.status}`,
+        );
       }
 
-      if (!res.ok) {
-        const msg = data?.message ?? `HTTP ${res.status}`;
-        throw new Error(msg);
-      }
+      const { accessJwt, user } = await verifyResp.json();
+      console.log("🔐 Got accessJwt:", accessJwt ? "YES" : "NO");
+      await setToken(accessJwt);
 
-      // Accept several possible response shapes
-      const token = data?.token ?? data?.data?.token;
-      if (!token) throw new Error("Token missing in response");
+      // Set authenticated user state
+      await appState.setAuthenticatedUser({
+        id: user.id,
+        phone: user.phone,
+        role: user.role,
+        registeredAt: new Date().toISOString(),
+        onboardingCompleted: false, // Will be updated based on feature flag
+        organizations: [],
+      });
 
-      await setToken(token);
+      // Track login success
+      analytics.track({
+        event: "login_success",
+        properties: {
+          userId: user.id,
+          phone: user.phone,
+          role: user.role,
+        },
+        timestamp: new Date(),
+      });
 
-      const displayPhone =
-        data?.phone ?? data?.user?.phone ?? data?.data?.phone ?? phone.trim();
+      console.log("🔐 Token stored, resetting boot sequence");
+      console.log("🔍 User state after login:", appState.getUser());
+      console.log("🔍 Needs onboarding:", appState.needsOnboarding());
 
-      Alert.alert("Success", `Logged in as ${displayPhone}`);
-      router.replace("/dashboard");
+      // Reset boot sequence to trigger re-evaluation
+      const { bootSequence } = await import("../src/boot/BootSequence");
+      bootSequence.reset();
+
+      // Let BootGuard handle the routing based on user state
+      // No manual navigation needed
     } catch (e: any) {
-      Alert.alert("Login failed", e?.message ?? String(e));
+      const details = [
+        `Base: ${API_BASE}`,
+        e?.status ? `HTTP ${e.status}` : "no HTTP",
+        e?.message || "",
+        e?.body ? `Body: ${String(e.body).slice(0, 200)}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      Alert.alert("Login failed", details);
     } finally {
       setLoading(false);
     }
@@ -52,40 +120,148 @@ export default function Login() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Login</Text>
+      <Text style={styles.title}>Vyamikk Samadhaan</Text>
+      <Text style={styles.subtitle}>Login to continue</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Phone"
-        keyboardType="phone-pad"
-        value={phone}
-        onChangeText={setPhone}
-      />
+      <View style={styles.form}>
+        <TextInput
+          value={phone}
+          onChangeText={setPhone}
+          keyboardType="phone-pad"
+          placeholder="Phone number"
+          style={styles.input}
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="OTP (optional)"
-        keyboardType="number-pad"
-        value={otp}
-        onChangeText={setOtp}
-      />
+        <TextInput
+          value={otp}
+          onChangeText={setOtp}
+          keyboardType="number-pad"
+          placeholder={__DEV__ ? "Dev: try 123456" : "OTP code"}
+          style={styles.input}
+        />
 
-      {loading ? <ActivityIndicator /> : <Button title="Submit" onPress={submit} />}
+        <TouchableOpacity
+          style={[
+            styles.button,
+            (!phone || !otp || loading) && styles.buttonDisabled,
+          ]}
+          onPress={onLogin}
+          disabled={!phone || !otp || loading}
+        >
+          <Text style={styles.buttonText}>
+            {loading ? "Logging in..." : "Login"}
+          </Text>
+        </TouchableOpacity>
+
+        {__DEV__ && stat && (
+          <Text style={{ color: "#9acdff", marginTop: 8, fontSize: 12 }}>
+            API {stat.base} ·{" "}
+            {stat.ok
+              ? `OK ${stat.status}`
+              : `DOWN ${stat.error || stat.status}`}
+          </Text>
+        )}
+
+        {__DEV__ && (
+          <TouchableOpacity
+            style={[
+              styles.button,
+              { backgroundColor: "#ff6b6b", marginTop: 16 },
+            ]}
+            onPress={onClearAppState}
+          >
+            <Text style={styles.buttonText}>Clear App State (Debug)</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>
+          Designed & developed by{" "}
+          <Text style={styles.footerBrand}>Special</Text>
+        </Text>
+        <Text style={styles.footerSubtext}>
+          Empowering MSMEs with smart workforce management
+        </Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, alignItems: "center", justifyContent: "center" },
-  title: { fontSize: 24, fontWeight: "700", marginBottom: 16 },
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
+    padding: 20,
+    justifyContent: "center",
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: "bold",
+    color: "#fff",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#ccc",
+    textAlign: "center",
+    marginBottom: 40,
+  },
+  form: {
+    gap: 16,
+  },
   input: {
-    width: "100%",
-    maxWidth: 420,
-    borderWidth: 1,
-    borderColor: "#ccc",
+    backgroundColor: "#fff",
     borderRadius: 8,
     padding: 12,
-    marginBottom: 12,
-    backgroundColor: "white",
+    fontSize: 16,
+  },
+  button: {
+    backgroundColor: "#007AFF",
+    borderRadius: 8,
+    padding: 16,
+    alignItems: "center",
+  },
+  buttonDisabled: {
+    backgroundColor: "#666",
+  },
+  buttonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  devPanel: {
+    marginTop: 16,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: "#111",
+  },
+  devText: {
+    color: "#9acdff",
+    fontSize: 12,
+  },
+  footer: {
+    position: "absolute",
+    bottom: 40,
+    left: 20,
+    right: 20,
+    alignItems: "center",
+  },
+  footerText: {
+    color: "#666",
+    fontSize: 14,
+    textAlign: "center",
+  },
+  footerBrand: {
+    color: "#007AFF",
+    fontWeight: "bold",
+  },
+  footerSubtext: {
+    color: "#444",
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 4,
   },
 });

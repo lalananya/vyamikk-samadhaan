@@ -1,0 +1,62 @@
+### Vyaamikk Samadhaan API (VS Code REST Client)
+@baseUrl = http://localhost:4000/api/v1
+@phone = +919876543210
+@otpToken = {{otpToken}}
+@access = {{access}}
+@refresh = {{refresh}}
+
+### Health
+GET {{baseUrl}}/healthz
+
+### Login
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "phone": "{{phone}}"
+}
+
+### Set variable: otpToken from login response
+@otpToken = {{login.response.body.$.otpToken}}
+
+### Debug OTP (DEV only)
+GET {{baseUrl}}/__debug/otp/{{phone}}
+
+### Verify
+# Replace the code below with the code from the debug response if needed
+# @name verify
+POST {{baseUrl}}/auth/verify
+Content-Type: application/json
+
+{
+  "otpToken": "{{otpToken}}",
+  "code": "123456",
+  "device": { "model": "OnePlus 12R", "platform": "android", "appVersion": "1.0.0" }
+}
+
+### Capture tokens
+@access = {{verify.response.body.$.accessJwt}}
+@refresh = {{verify.response.body.$.refreshJwt}}
+
+### Me
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{access}}
+
+### Refresh
+# @name refreshTokens
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshJwt": "{{refresh}}"
+}
+
+### Logout
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{access}}
+Content-Type: application/json
+
+{
+  "refreshJwt": "{{refresh}}"
+}

@@ -22,6 +22,7 @@ const DEV_SHORTCUT_FLAGS = {
   DEV_MOCK_USER: false, // Never allow mock users in production
   DEV_DEFAULT_ORG: false, // Never allow default org assignment
   DEV_SKIP_ONBOARDING: false, // Never allow onboarding bypass
+  DEV_SKIP_ME_VALIDATION: false, // Skip /me validation for faster development
 } as const;
 
 class FeatureFlagService {
@@ -67,6 +68,11 @@ class FeatureFlagService {
   // Guard function to check if onboarding can be skipped
   canSkipOnboarding(): boolean {
     return __DEV__ && this.isDevShortcutEnabled("DEV_SKIP_ONBOARDING");
+  }
+
+  // Guard function to check if /me validation can be skipped
+  canSkipMeValidation(): boolean {
+    return __DEV__ && this.isDevShortcutEnabled("DEV_SKIP_ME_VALIDATION");
   }
 
   async setFlag(flag: keyof FeatureFlags, enabled: boolean): Promise<void> {

@@ -13,6 +13,7 @@ import { appState } from "../state/AppState";
 import { featureFlags } from "../features/FeatureFlags";
 import { bootSequence } from "../boot/BootSequence";
 import { routeLogger } from "../debug/RouteLogger";
+import DevHelper from "../dev/DevHelper";
 
 interface StateInspectorProps {
   visible: boolean;
@@ -42,6 +43,7 @@ const StateInspector: React.FC<StateInspectorProps> = ({
       role: user?.role || "none",
       currentRoute: routeLogger.getCurrentRoute(),
       routeHistory: routeLogger.getRouteHistory(),
+      fastDevMode: DevHelper.isFastDevModeEnabled(),
     };
     setState(currentState);
   };
@@ -116,6 +118,29 @@ const StateInspector: React.FC<StateInspectorProps> = ({
         },
       ],
     );
+  };
+
+  const handleToggleFastDevMode = async () => {
+    if (!__DEV__) {
+      Alert.alert("Not Available", "Fast dev mode is only available in development");
+      return;
+    }
+
+    try {
+      const isEnabled = await DevHelper.toggleFastDevMode();
+      setRefreshKey((prev) => prev + 1);
+      Alert.alert(
+        "Fast Dev Mode",
+        `Fast dev mode is now ${isEnabled ? 'enabled' : 'disabled'}. ${
+          isEnabled 
+            ? 'App will start faster by skipping /me validation.' 
+            : 'App will validate with /me endpoint normally.'
+        }`,
+      );
+    } catch (error) {
+      console.error("💥 Failed to toggle fast dev mode:", error);
+      Alert.alert("Error", "Failed to toggle fast dev mode");
+    }
   };
 
   const formatValue = (value: any): string => {
@@ -270,6 +295,25 @@ const StateInspector: React.FC<StateInspectorProps> = ({
                     </Text>
                   </View>
                 </View>
+
+                {__DEV__ && (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Development</Text>
+                    <View style={styles.row}>
+                      <Text style={styles.label}>fastDevMode:</Text>
+                      <Text
+                        style={[
+                          styles.value,
+                          {
+                            color: state.fastDevMode ? "#4CAF50" : "#F44336",
+                          },
+                        ]}
+                      >
+                        {formatValue(state.fastDevMode)}
+                      </Text>
+                    </View>
+                  </View>
+                )}
               </>
             )}
 
@@ -323,6 +367,20 @@ const StateInspector: React.FC<StateInspectorProps> = ({
                   🧹 Clear Route History
                 </Text>
               </TouchableOpacity>
+
+              {__DEV__ && (
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    state.fastDevMode ? styles.enabledButton : styles.disabledButton,
+                  ]}
+                  onPress={handleToggleFastDevMode}
+                >
+                  <Text style={styles.actionButtonText}>
+                    {state.fastDevMode ? "🚀 Fast Dev Mode (ON)" : "🐌 Fast Dev Mode (OFF)"}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </ScrollView>
         </View>
@@ -425,6 +483,12 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     backgroundColor: "#2196F3",
+  },
+  enabledButton: {
+    backgroundColor: "#4CAF50",
+  },
+  disabledButton: {
+    backgroundColor: "#F44336",
   },
   actionButtonText: {
     color: "#fff",

@@ -8,6 +8,7 @@ import StateInspectorWrapper from "../src/components/StateInspectorWrapper";
 import { useRouteLogger } from "../src/hooks/useRouteLogger";
 import "../src/boot/globalDebug";
 import "../src/boot/instrumentFetch";
+import "../src/dev/ConsoleCommands";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 

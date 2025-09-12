@@ -1,5 +1,6 @@
 import { appState } from "../state/AppState";
 import { getToken } from "../session";
+import { featureFlags } from "../features/FeatureFlags";
 
 export type BootStep =
   | "HYDRATE"
@@ -76,7 +77,7 @@ export class BootSequence {
         return result;
       }
 
-      // Step 2: ME_CALL - Validate token with /me endpoint
+      // Step 2: ME_CALL - Validate token with /me endpoint (or skip in dev)
       const step2 = await this.validateWithMe();
       console.log("🔍 boot_step: ME_CALL");
 
@@ -140,6 +141,30 @@ export class BootSequence {
       if (!token) {
         console.log("🚪 No token found → ROUTE_LOGIN");
         return { success: false, errorType: "auth" };
+      }
+
+      // Check if we should skip /me validation in development
+      if (featureFlags.canSkipMeValidation()) {
+        console.log("🚀 DEV MODE: Skipping /me validation for faster development");
+        // Return a mock user for development
+        const mockUser = {
+          id: "dev-user-123",
+          phone: "+919876543210",
+          role: "admin",
+          registeredAt: new Date().toISOString(),
+          category: "owner",
+          onboardingCompleted: true,
+          organizations: [
+            {
+              id: "dev-org-123",
+              name: "Development Organization",
+              role: "owner",
+              status: "active"
+            }
+          ],
+        };
+        console.log("✅ DEV MODE: Using mock user data");
+        return { success: true, user: mockUser };
       }
 
       const apiBase = appState.getApiBase();

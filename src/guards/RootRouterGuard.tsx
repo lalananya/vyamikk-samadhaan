@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { bootSequence, BootResult } from "../boot/BootSequence";
@@ -12,13 +12,13 @@ const RootRouterGuard: React.FC = () => {
   const [bootResult, setBootResult] = useState<BootResult | null>(null);
   const bootPromiseRef = useRef<Promise<BootResult | null> | null>(null);
   const hasNavigatedRef = useRef(false);
+  const isInitializedRef = useRef(false);
   const router = useRouter();
 
-  const executeBootSequence = async (): Promise<BootResult | null> => {
-    if (bootPromiseRef.current) {
-      console.log(
-        "🚀 RootRouterGuard: Boot already in flight, awaiting existing promise",
-      );
+  const executeBootSequence = useCallback(async (): Promise<BootResult | null> => {
+    // Prevent multiple executions
+    if (bootPromiseRef.current || isInitializedRef.current) {
+      console.log("🚀 RootRouterGuard: Boot already in flight or initialized, skipping");
       return bootPromiseRef.current;
     }
 
@@ -94,24 +94,35 @@ const RootRouterGuard: React.FC = () => {
           router.replace("/login");
         }
         return null;
+      } finally {
+        // Mark as initialized to prevent re-execution
+        isInitializedRef.current = true;
       }
     })();
 
     bootPromiseRef.current = bootPromise;
     return bootPromise;
-  };
+  }, [router]);
 
   useEffect(() => {
-    console.log(
-      "🚀 RootRouterGuard: useEffect triggered, bootPromiseRef.current:",
-      !!bootPromiseRef.current,
-    );
-    if (!bootPromiseRef.current) {
+    // Only run once on mount
+    if (!isInitializedRef.current) {
+      console.log("🚀 RootRouterGuard: useEffect triggered - first time");
       executeBootSequence();
     } else {
-      console.log("🚀 RootRouterGuard: Boot already in flight, skipping");
+      console.log("🚀 RootRouterGuard: useEffect triggered - already initialized, skipping");
     }
-  }, []); // Only run once on mount
+  }, [executeBootSequence]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      console.log("🚀 RootRouterGuard: Component unmounting, cleaning up");
+      bootPromiseRef.current = null;
+      hasNavigatedRef.current = false;
+      isInitializedRef.current = false;
+    };
+  }, []);
 
   // Show blocking splash during boot sequence
   if (stackType === "Loading") {

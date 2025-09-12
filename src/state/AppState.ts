@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { analytics } from "../analytics/AnalyticsService";
 import { featureFlags } from "../features/FeatureFlags";
 import { clearToken } from "../session/index";
+import { healthCheckService } from "../services/HealthCheckService";
 
 export interface UserState {
   id: string;
@@ -26,7 +27,7 @@ class AppStateManager {
   private listeners: ((user: UserState | null) => void)[] = [];
   private authListeners: ((authenticated: boolean, reason: string) => void)[] =
     [];
-  private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private healthCheckStarted = false;
 
   async initialize(): Promise<void> {
     try {
@@ -228,6 +229,7 @@ class AppStateManager {
       }
 
       this.setAuthState(true, "me_validation_success");
+      // Start health checks only if not already running
       this.startHealthChecks();
       return true;
     } catch (error) {
@@ -287,35 +289,20 @@ class AppStateManager {
   }
 
   startHealthChecks(): void {
-    if (this.healthCheckInterval) {
-      console.log("🏥 Health checks already running, skipping");
-      return; // Already running
+    if (this.healthCheckStarted) {
+      console.log("🏥 Health checks already started, skipping");
+      return;
     }
-    console.log("🏥 Starting health checks with 30s interval");
-    this.healthCheckInterval = setInterval(async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(`${this.getApiBase()}/health`, {
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-        if (!response.ok) {
-          console.warn("Health check failed:", response.status);
-        }
-      } catch (error: any) {
-        if (error?.name !== "AbortError") {
-          console.warn("Health check error:", error);
-        }
-      }
-    }, 30000); // 30 seconds
+    console.log("🏥 Starting optimized health check service");
+    this.healthCheckStarted = true;
+    healthCheckService.start();
   }
 
   stopHealthChecks(): void {
-    if (this.healthCheckInterval) {
-      console.log("🏥 Stopping health checks");
-      clearInterval(this.healthCheckInterval);
-      this.healthCheckInterval = null;
+    if (this.healthCheckStarted) {
+      console.log("🏥 Stopping health check service");
+      this.healthCheckStarted = false;
+      healthCheckService.stop();
     }
   }
 }

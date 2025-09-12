@@ -1,17 +1,17 @@
-import { apiFetch } from "./api";
+import { apiFetch } from './index';
 
 export interface PincodeOffice {
-  office_name: string;
-  circle: string;
-  lat?: number;
-  lng?: number;
+    office_name: string;
+    circle: string;
+    lat?: number;
+    lng?: number;
 }
 
 export interface PincodeResponse {
-  pincode: string;
-  state: string;
-  district: string;
-  offices: PincodeOffice[];
+    pincode: string;
+    state: string;
+    district: string;
+    offices: PincodeOffice[];
 }
 
 /**
@@ -20,10 +20,10 @@ export interface PincodeResponse {
  * @returns Address information including state, district, and post offices
  */
 export async function getAddressByPin(pin: string): Promise<PincodeResponse> {
-  if (!/^[1-9]\d{5}$/.test(pin)) {
-    throw new Error("Invalid PIN code format");
-  }
+    if (!/^[1-9]\d{5}$/.test(pin)) {
+        throw new Error('Invalid PIN code format');
+    }
 
-  const response = await apiFetch(`/pincode/${pin}`);
-  return response;
+    const response = await apiFetch(`/pincode/${pin}`);
+    return response;
 }

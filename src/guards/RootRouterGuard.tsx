@@ -102,9 +102,14 @@ const RootRouterGuard: React.FC = () => {
   };
 
   useEffect(() => {
-    console.log("🚀 RootRouterGuard: useEffect triggered");
+    console.log(
+      "🚀 RootRouterGuard: useEffect triggered, bootPromiseRef.current:",
+      !!bootPromiseRef.current,
+    );
     if (!bootPromiseRef.current) {
       executeBootSequence();
+    } else {
+      console.log("🚀 RootRouterGuard: Boot already in flight, skipping");
     }
   }, []); // Only run once on mount
 

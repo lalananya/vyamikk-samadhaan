@@ -228,7 +228,10 @@ class AppStateManager {
       }
 
       this.setAuthState(true, "me_validation_success");
-      this.startHealthChecks();
+      // Only start health checks if not already running
+      if (!this.healthCheckInterval) {
+        this.startHealthChecks();
+      }
       return true;
     } catch (error) {
       console.error("Failed to validate authentication:", error);
@@ -288,6 +291,7 @@ class AppStateManager {
 
   startHealthChecks(): void {
     if (this.healthCheckInterval) {
+      console.log("🏥 Health checks already running, skipping");
       return; // Already running
     }
     console.log("🏥 Starting health checks with 30s interval");

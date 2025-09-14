@@ -29,8 +29,8 @@ const tunnel = "https://vyamikk-api.loca.lt"; // change if you use another
 export const API_BASE =
   envBase ||
   extraBase ||
-  (usb ? "http://127.0.0.1:4000/api/v1" : "") ||
-  (lan ? `http://${lan}:4000/api/v1` : "") ||
+  (usb ? "http://127.0.0.1:4001/api/v1" : "") ||
+  (lan ? `http://${lan}:4001/api/v1` : "") ||
   tunnel;
 
 // Debug logging

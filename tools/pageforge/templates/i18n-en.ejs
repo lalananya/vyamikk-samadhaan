@@ -1,0 +1,51 @@
+{
+"<%= kebabCase(spec.id) %>": {
+    "title": "<%= spec.title %>",
+        "empty_state": {
+        "title": "<%= spec.ui.emptyState?.en || 'No items yet' %>",
+            "message": "<%= spec.ui.emptyState?.en || 'Get started by adding your first item' %>",
+                "action": "Add Item"
+                },
+                <% if (spec.entities && spec.entities.length> 0) { %>
+                    <% spec.entities.forEach(entity=> { %>
+                        "<%= kebabCase(entity.name) %>": {
+                            <% entity.fields.forEach(field=> { %>
+                                "<%= field.key %>": "<%= getFieldLabel(field) %>",
+                                        <% }); %>
+                                            "create": "Create <%= entity.name %>",
+                                                "edit": "Edit <%= entity.name %>",
+                                                    "delete": "Delete <%= entity.name %>",
+                                                        "confirm_delete": "Delete <%= entity.name %>?",
+                                                            "confirm_delete_message": "This action cannot be undone."
+                                                            },
+                                                            <% }); %>
+                                                                <% } %>
+                                                                    "actions": {
+                                                                    "create": "Create",
+                                                                    "edit": "Edit",
+                                                                    "delete": "Delete",
+                                                                    "save": "Save",
+                                                                    "cancel": "Cancel",
+                                                                    "retry": "Retry"
+                                                                    },
+                                                                    "errors": {
+                                                                    "create_failed": "Failed to create item",
+                                                                    "update_failed": "Failed to update item",
+                                                                    "delete_failed": "Failed to delete item",
+                                                                    "load_failed": "Failed to load data"
+                                                                    }
+                                                                    },
+                                                                    "common": {
+                                                                    "loading": "Loading...",
+                                                                    "error": "Error",
+                                                                    "success": "Success",
+                                                                    "confirm": "Confirm",
+                                                                    "cancel": "Cancel",
+                                                                    "save": "Save",
+                                                                    "delete": "Delete",
+                                                                    "edit": "Edit",
+                                                                    "add": "Add",
+                                                                    "retry": "Retry",
+                                                                    "untitled": "Untitled"
+                                                                    }
+                                                                    }

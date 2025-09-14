@@ -50,7 +50,7 @@
       "persistNavigationState": false
     },
     "extra": {
-      "apiUrl": "http://192.168.29.242:4000",
+      "API_BASE": "http://192.168.29.242:4001/api/v1",
       "adminPhones": []
     }
   }

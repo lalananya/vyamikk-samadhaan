@@ -4,20 +4,25 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   StyleSheet,
 } from "react-native";
 import { router } from "expo-router";
-import { loginReq, API_BASE, pingApi, normalizePhone } from "../src/api";
-import { setToken } from "../src/session";
+import { API_BASE, pingApi, normalizePhone } from "../src/api";
 import { appState } from "../src/state/AppState";
 import { analytics } from "../src/analytics/AnalyticsService";
+import { authService } from "../src/api/auth";
+import { ValidationUtils } from "../src/utils/ValidationUtils";
+import { AlertUtils } from "../src/utils/AlertUtils";
+import { ErrorUtils } from "../src/utils/ErrorUtils";
+import { handleOfflineError } from "../src/utils/OfflineUtils";
+import { useLoadingState } from "../src/hooks/useLoadingState";
+import AnimatedLogo from "../src/components/AnimatedLogo";
 
 export default function Login() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
-  const [loading, setLoading] = useState(false);
   const [stat, setStat] = useState<any>(null);
+  const { isLoading, error, execute, setError } = useLoadingState();
 
   useEffect(() => {
     (async () => {
@@ -37,91 +42,121 @@ export default function Login() {
   async function onClearAppState() {
     try {
       await appState.clearAllData();
-      Alert.alert("Success", "App state cleared. Please restart the app.");
+      // Navigate to login after clearing state
+      router.replace("/login");
+      AlertUtils.showSuccess("App state cleared. You can now login fresh.");
     } catch (error) {
-      Alert.alert("Error", "Failed to clear app state");
+      AlertUtils.showError("Failed to clear app state");
     }
   }
 
   async function onLogin() {
-    if (loading || !phone || !otp) return;
-    setLoading(true);
-
-    try {
-      const phone10 = normalizePhone(phone);
-
-      // Step 1: Get OTP token
-      const loginResp = await loginReq({ phone: phone10 });
-      const { otpToken } = loginResp;
-
-      // Step 2: Verify OTP
-      const verifyResp = await fetch(`${API_BASE}/auth/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ otpToken, code: otp }),
-      });
-
-      if (!verifyResp.ok) {
-        const errorData = await verifyResp.json();
-        throw new Error(
-          errorData.error?.message || `HTTP ${verifyResp.status}`,
-        );
-      }
-
-      const { accessJwt, user } = await verifyResp.json();
-      console.log("🔐 Got accessJwt:", accessJwt ? "YES" : "NO");
-      await setToken(accessJwt);
-
-      // Set authenticated user state
-      await appState.setAuthenticatedUser({
-        id: user.id,
-        phone: user.phone,
-        role: user.role,
-        registeredAt: new Date().toISOString(),
-        onboardingCompleted: false, // Will be updated based on feature flag
-        organizations: [],
-      });
-
-      // Track login success
-      analytics.track({
-        event: "login_success",
-        properties: {
-          userId: user.id,
-          phone: user.phone,
-          role: user.role,
-        },
-        timestamp: new Date(),
-      });
-
-      console.log("🔐 Token stored, resetting boot sequence");
-      console.log("🔍 User state after login:", appState.getUser());
-      console.log("🔍 Needs onboarding:", appState.needsOnboarding());
-
-      // Reset boot sequence to trigger re-evaluation
-      const { bootSequence } = await import("../src/boot/BootSequence");
-      bootSequence.reset();
-
-      // Let BootGuard handle the routing based on user state
-      // No manual navigation needed
-    } catch (e: any) {
-      const details = [
-        `Base: ${API_BASE}`,
-        e?.status ? `HTTP ${e.status}` : "no HTTP",
-        e?.message || "",
-        e?.body ? `Body: ${String(e.body).slice(0, 200)}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
-      Alert.alert("Login failed", details);
-    } finally {
-      setLoading(false);
+    if (!phone || !otp) {
+      AlertUtils.showError("Please enter both phone number and OTP");
+      return;
     }
+    
+    // Prevent automatic login if values are empty
+    if (phone.trim() === "" || otp.trim() === "") {
+      AlertUtils.showError("Please enter both phone number and OTP");
+      return;
+    }
+
+    // Normalize inputs to strings and trim whitespace
+    const normalizedPhone = String(phone).trim();
+    const normalizedOtp = String(otp).trim();
+    
+    console.log("🔍 Normalized inputs:", { 
+      original: { phone, otp }, 
+      normalized: { phone: normalizedPhone, otp: normalizedOtp },
+      types: { phone: typeof normalizedPhone, otp: typeof normalizedOtp }
+    });
+
+    // Add timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      setError("Login timeout - please try again");
+      console.log("⏰ Login timeout after 30 seconds");
+    }, 30000);
+
+    await execute(async () => {
+      console.log("🔐 Attempting login with:", { phone: normalizedPhone, otp: normalizedOtp });
+      
+      // Try simple login first (single-step)
+      try {
+        const response = await authService.simpleLogin({ phone: normalizedPhone, otp: normalizedOtp });
+        console.log("✅ Simple login successful:", response);
+        
+        // Store the JWT token first
+        if (response.accessJwt) {
+          const { setToken } = await import("../src/storage/tokens");
+          await setToken(response.accessJwt);
+          console.log("💾 JWT token stored successfully");
+        } else {
+          console.log("⚠️ No accessJwt in response:", response);
+        }
+        
+        // Set authenticated user state
+        await appState.setAuthenticatedUser(response.user);
+        
+        console.log("🔍 User state after login:", appState.getUser());
+        
+        // Wait a moment for state to be fully set
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Let BootSequence handle routing after login
+        const { bootSequence } = await import("../src/boot/BootSequence");
+        const result = await bootSequence.executeBootSequence();
+        console.log("🎯 Login: BootSequence result:", result);
+        
+        // Navigate based on boot sequence result
+        router.replace(result.target as any);
+        
+        // Clear timeout on success
+        clearTimeout(timeoutId);
+        
+      } catch (error) {
+        console.log("❌ Simple login failed:", error);
+        // Clear timeout on error
+        clearTimeout(timeoutId);
+        // Force reset loading state on error
+        setError(error?.message || "Login failed");
+        throw error;
+      }
+    }, {
+      onError: (error) => {
+        console.log("🚨 Login error:", error);
+        AlertUtils.showError("Login failed: " + (error?.message || "Unknown error"));
+        // Ensure loading state is reset
+        setTimeout(() => setError(null), 5000); // Clear error after 5 seconds
+        // Clear timeout on error
+        clearTimeout(timeoutId);
+      }
+    });
+  }
+
+  // Show verifying access screen during login process
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.verifyingContainer}>
+          <AnimatedLogo size={120} showAnimation={true} />
+          <Text style={styles.title}>Vyamikk Samadhaan</Text>
+          <Text style={styles.verifyingText}>Verifying access...</Text>
+          <Text style={styles.verifyingSubtext}>
+            Please wait while we authenticate your credentials
+          </Text>
+        </View>
+      </View>
+    );
   }
 
   return (
     <View style={styles.container}>
+      <AnimatedLogo size={100} showAnimation={true} />
       <Text style={styles.title}>Vyamikk Samadhaan</Text>
       <Text style={styles.subtitle}>Login to continue</Text>
+
+      {error && <Text style={styles.errorText}>{error}</Text>}
 
       <View style={styles.form}>
         <TextInput
@@ -136,20 +171,20 @@ export default function Login() {
           value={otp}
           onChangeText={setOtp}
           keyboardType="number-pad"
-          placeholder={__DEV__ ? "Dev: try 123456" : "OTP code"}
+          placeholder="OTP"
           style={styles.input}
         />
 
         <TouchableOpacity
           style={[
             styles.button,
-            (!phone || !otp || loading) && styles.buttonDisabled,
+            isLoading && styles.buttonDisabled,
           ]}
           onPress={onLogin}
-          disabled={!phone || !otp || loading}
+          disabled={isLoading}
         >
           <Text style={styles.buttonText}>
-            {loading ? "Logging in..." : "Login"}
+            {isLoading ? "Logging in..." : "Login"}
           </Text>
         </TouchableOpacity>
 
@@ -263,5 +298,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: "center",
     marginTop: 4,
+  },
+  verifyingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  verifyingText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#fff",
+    marginTop: 20,
+    textAlign: "center",
+  },
+  verifyingSubtext: {
+    fontSize: 14,
+    color: "#888",
+    marginTop: 8,
+    textAlign: "center",
+  },
+  errorText: {
+    color: "#ff6b6b",
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 16,
   },
 });

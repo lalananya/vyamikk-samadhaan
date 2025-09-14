@@ -5,9 +5,84 @@ const jwt = require("jsonwebtoken");
 const app = express();
 const PORT = 4000;
 
+// E.164 phone number normalization helper
+function normalizePhoneNumber(phone) {
+  if (!phone) return null;
+
+  // Remove all non-digit characters
+  const digits = phone.replace(/\D/g, '');
+
+  // If it starts with 91 and has 10 more digits, it's already in E.164 format
+  if (digits.startsWith('91') && digits.length === 12) {
+    return '+' + digits;
+  }
+
+  // If it has 10 digits, assume it's Indian and add +91
+  if (digits.length === 10) {
+    return '+91' + digits;
+  }
+
+  // If it already starts with +, return as is
+  if (phone.startsWith('+')) {
+    return phone;
+  }
+
+  // Default: add +91 prefix
+  return '+91' + digits;
+}
+
 // Middleware
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+
+// JWT Authentication middleware
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({
+      error: {
+        code: "UNAUTHORIZED",
+        message: "Missing or invalid authorization header",
+      },
+    });
+  }
+
+  try {
+    const token = authHeader.substring(7);
+    const payload = jwt.verify(token, "dev_access_change_me_in_production");
+
+    // Normalize phone number for consistent lookup
+    const normalizedPhone = normalizePhoneNumber(payload.phone);
+    if (!normalizedPhone) {
+      return res.status(401).json({
+        error: {
+          code: "INVALID_TOKEN",
+          message: "Invalid phone number in token",
+        },
+      });
+    }
+
+    // Set user info in request for use in endpoints
+    req.user = {
+      id: payload.sub,
+      phone: normalizedPhone,
+      jti: payload.jti,
+      iat: payload.iat,
+      exp: payload.exp
+    };
+
+    next();
+  } catch (error) {
+    console.log("❌ JWT verification failed:", error.message);
+    return res.status(401).json({
+      error: {
+        code: "INVALID_TOKEN",
+        message: "Invalid or expired token",
+      },
+    });
+  }
+}
 
 // Simple logger
 app.use((req, res, next) => {
@@ -21,6 +96,15 @@ const otpStore = new Map();
 
 // Test user states for gating logic testing
 function getTestUserState(userId, phone) {
+  // Special handling for your phone number
+  if (phone === "+919654604148") {
+    return {
+      category: "owner",
+      onboarding_complete: false, // Force onboarding for testing
+      memberships: [],
+    };
+  }
+
   // Use phone number to determine test state
   const phoneSuffix = phone.slice(-4);
 
@@ -96,26 +180,44 @@ app.get("/api/v1/test/down", (req, res) => {
 app.post("/api/v1/auth/login", (req, res) => {
   const { phone } = req.body || {};
 
-  if (!phone || !/^\+91\d{10}$/.test(phone)) {
+  if (!phone) {
     return res.status(400).json({
       error: {
         code: "INVALID_PHONE",
-        message: "Phone must be in format +91XXXXXXXXXX",
+        message: "Phone number is required",
       },
     });
   }
 
-  // Generate OTP
-  const code = "123456"; // Fixed OTP for development
+  // Normalize phone number to E.164 format
+  const normalizedPhone = normalizePhoneNumber(phone);
+  if (!normalizedPhone) {
+    return res.status(400).json({
+      error: {
+        code: "INVALID_PHONE",
+        message: "Invalid phone number format",
+      },
+    });
+  }
+
+  // Generate OTP - special handling for specific phone numbers
+  let code;
+  if (normalizedPhone === "+919654604148") {
+    code = "654321"; // Special OTP for your phone number
+  } else {
+    code = "123456"; // Default OTP for other numbers
+  }
+
   const otpToken = Math.random().toString(36).substring(2, 15);
 
-  // Store OTP
+  // Store OTP with normalized phone number for verification
   otpStore.set(otpToken, {
     code,
+    phone: normalizedPhone, // Store the normalized phone number with OTP
     expires: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
   });
 
-  console.log(`🔐 OTP for ${phone}: ${code}`);
+  console.log(`🔐 OTP for ${normalizedPhone}: ${code}`);
 
   res.json({
     otpToken,
@@ -157,14 +259,15 @@ app.post("/api/v1/auth/verify", (req, res) => {
   // Remove used OTP
   otpStore.delete(otpToken);
 
-  // Create or get user
-  const phone = "+919876543210"; // Mock phone
+  // Use the actual phone number from the OTP store
+  const phone = stored.phone;
   let user = users.get(phone);
   if (!user) {
     user = {
       id: Math.random().toString(36).substring(2, 15),
       phone,
-      role: "pro",
+      role: "admin", // Default role
+      category: "owner", // Default category
       createdAt: new Date(),
     };
     users.set(phone, user);
@@ -174,7 +277,7 @@ app.post("/api/v1/auth/verify", (req, res) => {
   const accessJwt = jwt.sign(
     { sub: user.id, phone: user.phone, jti: Math.random().toString(36) },
     "dev_access_change_me_in_production",
-    { expiresIn: "15m" },
+    { expiresIn: "24h" }, // Extended to 24 hours for development
   );
 
   const refreshJwt = jwt.sign(
@@ -193,30 +296,26 @@ app.post("/api/v1/auth/verify", (req, res) => {
   });
 });
 
-app.get("/api/v1/auth/me", (req, res) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({
-      error: {
-        code: "UNAUTHORIZED",
-        message: "Missing or invalid authorization header",
-      },
-    });
-  }
-
+app.get("/api/v1/auth/me", authenticateToken, (req, res) => {
   try {
-    const token = authHeader.substring(7);
-    const payload = jwt.verify(token, "dev_access_change_me_in_production");
+    const { phone, id } = req.user; // Get from middleware
 
-    const user = users.get(payload.phone);
+    // Try to get user from storage first
+    let user = users.get(phone);
+
+    // If user not found in storage, create from JWT payload (for robustness)
     if (!user) {
-      return res.status(401).json({
-        error: {
-          code: "USER_NOT_FOUND",
-          message: "User not found",
-        },
-      });
+      console.log("⚠️ /auth/me endpoint - User not in storage, creating from JWT payload");
+      user = {
+        id: id,
+        phone: phone,
+        role: "admin", // Default role
+        category: "owner", // Default category
+        createdAt: new Date(),
+        onboardingCompleted: false,
+        organizations: []
+      };
+      users.set(phone, user);
     }
 
     const response = {
@@ -258,31 +357,31 @@ app.get("/api/v1/auth/me", (req, res) => {
 });
 
 // Add the missing /api/v1/me endpoint (alias for /api/v1/auth/me)
-app.get("/api/v1/me", (req, res) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({
-      error: {
-        code: "UNAUTHORIZED",
-        message: "Missing or invalid authorization header",
-      },
-    });
-  }
-
+app.get("/api/v1/me", authenticateToken, (req, res) => {
   try {
-    const token = authHeader.substring(7);
-    const payload = jwt.verify(token, "dev_access_change_me_in_production");
+    const { phone, id } = req.user; // Get from middleware
+    console.log("🔍 /me endpoint - Looking for user with phone:", phone);
+    console.log("🔍 /me endpoint - Available users:", Array.from(users.keys()));
 
-    const user = users.get(payload.phone);
+    // Try to get user from storage first
+    let user = users.get(phone);
+
+    // If user not found in storage, create from JWT payload (for robustness)
     if (!user) {
-      return res.status(401).json({
-        error: {
-          code: "USER_NOT_FOUND",
-          message: "User not found",
-        },
-      });
+      console.log("⚠️ /me endpoint - User not in storage, creating from JWT payload");
+      user = {
+        id: id,
+        phone: phone,
+        role: "admin", // Default role
+        category: "owner", // Default category
+        createdAt: new Date(),
+        onboardingCompleted: false,
+        organizations: []
+      };
+      users.set(phone, user);
     }
+
+    console.log("✅ /me endpoint - User found/created:", user);
 
     // Create different user states for testing gating logic and error scenarios
     let testUserState = getTestUserState(user.id, user.phone);
@@ -304,7 +403,7 @@ app.get("/api/v1/me", (req, res) => {
       return res.json({ invalid: "response" });
     } else if (phoneSuffix === "9997") {
       // Simulate network timeout (this will be caught by fetch timeout)
-      return new Promise(() => {}); // Never resolves
+      return new Promise(() => { }); // Never resolves
     }
 
     const response = {
@@ -518,6 +617,7 @@ app.post("/api/v1/user/onboarding/complete", (req, res) => {
     const onboardingData = req.body;
     console.log("📝 Onboarding completed:", {
       userId: payload.userId,
+      role: onboardingData.role,
       category: onboardingData.category,
       legalEntity: onboardingData.legalEntity,
       displayName: onboardingData.displayName,

@@ -1,11 +1,13 @@
 import { appState } from "../state/AppState";
-import { getToken } from "../session";
+import { getToken } from "../storage/tokens";
 import { featureFlags } from "../features/FeatureFlags";
+import DevHelper from "../dev/DevHelper";
 
 export type BootStep =
   | "HYDRATE"
   | "ME_CALL"
   | "ROUTE_LOGIN"
+  | "ROUTE_LANGUAGE_SELECTION"
   | "ROUTE_ONBOARDING"
   | "ROUTE_ORG_SETUP"
   | "ROUTE_JOIN_EMPLOYER"
@@ -24,7 +26,6 @@ export interface BootResult {
 
 export class BootSequence {
   private static instance: BootSequence;
-  private isBooted = false;
   private isExecuting = false;
   private bootResult: BootResult | null = null;
 
@@ -35,30 +36,18 @@ export class BootSequence {
     return BootSequence.instance;
   }
 
-  async executeBootSequence(): Promise<BootResult> {
-    // If already booted, return cached result
-    if (this.isBooted && this.bootResult) {
-      console.log(
-        "🚀 BootSequence: Already booted, returning cached result:",
-        this.bootResult,
-      );
-      return this.bootResult;
-    }
+  async reset(): Promise<void> {
+    console.log("🔄 BootSequence: Resetting boot state");
+    this.isExecuting = false;
+    this.bootResult = null;
 
-    // If already executing, wait for completion
-    if (this.isExecuting) {
-      console.log("🚀 BootSequence: Already executing, waiting for completion");
-      return new Promise((resolve) => {
-        const checkComplete = () => {
-          if (!this.isExecuting && this.isBooted) {
-            resolve(this.bootResult!);
-          } else {
-            setTimeout(checkComplete, 100);
-          }
-        };
-        checkComplete();
-      });
-    }
+    // Don't reset global boot flag - let RootRouterGuard handle it
+    // The global boot flag should only be reset when explicitly needed
+  }
+
+  async executeBootSequence(): Promise<BootResult> {
+    // Always execute fresh boot sequence to handle state changes
+    console.log("🚀 BootSequence: Executing fresh boot sequence");
 
     this.isExecuting = true;
     console.log("🚀 BootSequence: Starting boot sequence");
@@ -71,7 +60,6 @@ export class BootSequence {
       if (!step1.hasToken) {
         const result = { step: "ROUTE_LOGIN", target: "/login" };
         this.bootResult = result;
-        this.isBooted = true;
         this.isExecuting = false;
         console.log("🔍 boot_step: ROUTE_LOGIN");
         return result;
@@ -97,7 +85,6 @@ export class BootSequence {
         }
 
         this.bootResult = result;
-        this.isBooted = true;
         this.isExecuting = false;
         return result;
       }
@@ -107,7 +94,6 @@ export class BootSequence {
       console.log(`🔍 boot_step: ROUTE_${step3.step}`);
 
       this.bootResult = step3;
-      this.isBooted = true;
       this.isExecuting = false;
       return step3;
     } catch (error) {
@@ -124,6 +110,24 @@ export class BootSequence {
   private async hydrateStorage(): Promise<{ hasToken: boolean }> {
     try {
       const token = await getToken();
+      console.log("💾 Token from storage:", token ? "YES" : "NO");
+      if (token) {
+        console.log("💾 Token preview:", token.substring(0, 20) + "...");
+      }
+      
+      // Check if we have a user in app state
+      const user = appState.getUser();
+      console.log("💾 User from app state:", user ? "YES" : "NO");
+      if (user) {
+        console.log("💾 User details:", {
+          id: user.id,
+          phone: user.phone,
+          language: user.language,
+          onboardingCompleted: user.onboardingCompleted,
+          organizations: user.organizations?.length || 0
+        });
+      }
+      
       return { hasToken: !!token };
     } catch (error) {
       console.error("💥 Hydrate storage error:", error);
@@ -144,7 +148,8 @@ export class BootSequence {
       }
 
       // Check if we should skip /me validation in development
-      if (featureFlags.canSkipMeValidation()) {
+      // Force enable fast dev mode in development
+      if (__DEV__) {
         console.log("🚀 DEV MODE: Skipping /me validation for faster development");
         // Return a mock user for development
         const mockUser = {
@@ -170,7 +175,7 @@ export class BootSequence {
       const apiBase = appState.getApiBase();
       console.log("🌐 Validating token with /me endpoint...");
 
-      const response = await fetch(`${apiBase}/me`, {
+      const response = await fetch(`${apiBase}/auth/me`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -268,24 +273,47 @@ export class BootSequence {
   }
 
   private async determineRoute(user: any): Promise<BootResult> {
+    console.log("🔍 determineRoute called with user:", user);
+    
     if (!user) {
+      console.log("🚪 No user provided → ROUTE_LOGIN");
       return { step: "ROUTE_LOGIN", target: "/login" };
     }
 
+    // Ensure user has required fields with defaults
+    const userWithDefaults = {
+      ...user,
+      category: user.category || user.role || "owner", // Use category, role, or default to owner
+      onboardingCompleted: user.onboardingCompleted || false,
+      organizations: user.organizations || [],
+    };
+
     console.log("🔍 BootSequence: Determining route for user:", {
-      id: user.id,
-      category: user.category,
-      onboardingCompleted: user.onboardingCompleted,
-      membershipsCount: user.organizations?.length || 0,
+      id: userWithDefaults.id,
+      category: userWithDefaults.category,
+      role: userWithDefaults.role,
+      onboardingCompleted: userWithDefaults.onboardingCompleted,
+      membershipsCount: userWithDefaults.organizations?.length || 0,
+      language: userWithDefaults.language,
     });
 
-    // Gate 1: Onboarding completion - FORCE onboarding if incomplete
-    if (!user.onboardingCompleted) {
-      console.log("🚪 Gate 1: Onboarding incomplete → FORCE Onboarding Wizard");
+    // Gate 0: Language selection - Route to language selection if not set
+    if (!userWithDefaults.language) {
+      console.log("🚪 Gate 0: Language not set → Route to Language Selection");
+      return {
+        step: "ROUTE_LANGUAGE_SELECTION",
+        target: "/language-selection",
+        user: userWithDefaults,
+      };
+    }
+
+    // Gate 1: Onboarding completion - Route to PostLoginGate for profile creation choice
+    if (!userWithDefaults.onboardingCompleted) {
+      console.log("🚪 Gate 1: Onboarding incomplete → Route to PostLoginGate");
       return {
         step: "ROUTE_ONBOARDING",
-        target: "/onboarding",
-        user,
+        target: "/post-login-gate",
+        user: userWithDefaults,
         needsOnboarding: true,
       };
     }
@@ -298,8 +326,8 @@ export class BootSequence {
       "supervisor",
       "accountant",
     ];
-    const isBusinessRole = businessRoles.includes(user.category);
-    const hasMemberships = user.organizations && user.organizations.length > 0;
+    const isBusinessRole = businessRoles.includes(userWithDefaults.category);
+    const hasMemberships = userWithDefaults.organizations && userWithDefaults.organizations.length > 0;
 
     if (isBusinessRole && !hasMemberships) {
       console.log(
@@ -308,15 +336,15 @@ export class BootSequence {
       return {
         step: "ROUTE_ORG_SETUP",
         target: "/organizations",
-        user,
+        user: userWithDefaults,
         hasMemberships: false,
       };
     }
 
     // Gate 3: Labour roles need employer link
     const labourRoles = ["labour", "supervisor", "accountant"];
-    const isLabourRole = labourRoles.includes(user.category);
-    const hasEmployerLink = this.hasEmployerLink(user);
+    const isLabourRole = labourRoles.includes(userWithDefaults.category);
+    const hasEmployerLink = this.hasEmployerLink(userWithDefaults);
 
     if (isLabourRole && !hasEmployerLink) {
       console.log(
@@ -325,15 +353,15 @@ export class BootSequence {
       return {
         step: "ROUTE_JOIN_EMPLOYER",
         target: "/join-employer",
-        user,
+        user: userWithDefaults,
         hasEmployerLink: false,
       };
     }
 
     // Gate 4: Professional roles need client link
     const professionalRoles = ["professional", "ca", "lawyer", "advocate"];
-    const isProfessionalRole = professionalRoles.includes(user.category);
-    const hasClientLink = this.hasClientLink(user);
+    const isProfessionalRole = professionalRoles.includes(userWithDefaults.category);
+    const hasClientLink = this.hasClientLink(userWithDefaults);
 
     if (isProfessionalRole && !hasClientLink) {
       console.log(
@@ -342,7 +370,7 @@ export class BootSequence {
       return {
         step: "ROUTE_LINK_CLIENT",
         target: "/link-client",
-        user,
+        user: userWithDefaults,
         hasClientLink: false,
       };
     }
@@ -352,7 +380,7 @@ export class BootSequence {
     return {
       step: "ROUTE_DASHBOARD",
       target: "/dashboard",
-      user,
+      user: userWithDefaults,
       hasMemberships: hasMemberships,
       hasEmployerLink: hasEmployerLink,
       hasClientLink: hasClientLink,
@@ -402,13 +430,16 @@ export class BootSequence {
   }
 
   isBootComplete(): boolean {
-    return this.isBooted;
+    return this.bootResult !== null;
   }
 
   reset(): void {
-    this.isBooted = false;
+    console.log("🚀 BootSequence: Resetting boot state");
     this.isExecuting = false;
     this.bootResult = null;
+
+    // Don't reset global boot flag - let RootRouterGuard handle it
+    // The global boot flag should only be reset when explicitly needed
   }
 }
 

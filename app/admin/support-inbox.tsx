@@ -6,7 +6,6 @@ import {
   FlatList,
   TouchableOpacity,
   TextInput,
-  Alert,
   RefreshControl,
   SafeAreaView,
   ActivityIndicator,
@@ -14,7 +13,9 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
-import { apiAdmin } from "../../src/api";
+import { apiService } from "../../src/services/ApiService";
+import { AlertUtils } from "../../src/utils/AlertUtils";
+import { usePaginationLoadingState } from "../../src/hooks/useLoadingState";
 import { getToken } from "../../src/auth";
 import Strings from "../../src/strings";
 

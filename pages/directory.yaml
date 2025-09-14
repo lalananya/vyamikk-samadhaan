@@ -1,0 +1,17 @@
+id: directory
+route: /directory
+title: Directory
+roles: [Owner, Admin, Manager]
+entities:
+  - name: Person
+    fields:
+      - { key: "ecosystemId", type: "string", required: true }
+      - { key: "displayName", type: "string", required: true }
+      - { key: "role", type: "string", required: true }
+api:
+  base: /api/v1/directory
+  endpoints:
+    - { method: GET,  path: /resolve, query: { identifier }, auth: true }
+    - { method: GET,  path: /list, query: { query }, auth: true }
+ui:
+  features: [searchDebounce, UEIDValidation, tapToCopy]

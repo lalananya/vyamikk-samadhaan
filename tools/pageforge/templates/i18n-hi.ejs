@@ -1,0 +1,52 @@
+{
+"<%= kebabCase(spec.id) %>": {
+    "title": "<%= getHindiTitle(spec) %>",
+        "empty_state": {
+        "title": "<%= spec.ui.emptyState?.hi || 'अभी कोई आइटम नहीं' %>",
+            "message": "<%= spec.ui.emptyState?.hi || 'अपना पहला आइटम जोड़कर शुरू करें' %>",
+                "action": "आइटम जोड़ें"
+                },
+                <% if (spec.entities && spec.entities.length> 0) { %>
+                    <% spec.entities.forEach(entity=> { %>
+                        "<%= kebabCase(entity.name) %>": {
+                            <% entity.fields.forEach(field=> { %>
+                                "<%= field.key %>": "<%= getHindiFieldLabel(field) %>",
+                                        <% }); %>
+                                            "create": "<%= entity.name %> बनाएं",
+                                                "edit": "<%= entity.name %> संपादित करें",
+                                                    "delete": "<%= entity.name %> हटाएं",
+                                                        "confirm_delete": "<%= entity.name %> हटाएं?",
+                                                            "confirm_delete_message": "यह क्रिया पूर्ववत नहीं की जा
+                                                            सकती।"
+                                                            },
+                                                            <% }); %>
+                                                                <% } %>
+                                                                    "actions": {
+                                                                    "create": "बनाएं",
+                                                                    "edit": "संपादित करें",
+                                                                    "delete": "हटाएं",
+                                                                    "save": "सहेजें",
+                                                                    "cancel": "रद्द करें",
+                                                                    "retry": "पुनः प्रयास करें"
+                                                                    },
+                                                                    "errors": {
+                                                                    "create_failed": "आइटम बनाने में विफल",
+                                                                    "update_failed": "आइटम अपडेट करने में विफल",
+                                                                    "delete_failed": "आइटम हटाने में विफल",
+                                                                    "load_failed": "डेटा लोड करने में विफल"
+                                                                    }
+                                                                    },
+                                                                    "common": {
+                                                                    "loading": "लोड हो रहा है...",
+                                                                    "error": "त्रुटि",
+                                                                    "success": "सफल",
+                                                                    "confirm": "पुष्टि करें",
+                                                                    "cancel": "रद्द करें",
+                                                                    "save": "सहेजें",
+                                                                    "delete": "हटाएं",
+                                                                    "edit": "संपादित करें",
+                                                                    "add": "जोड़ें",
+                                                                    "retry": "पुनः प्रयास करें",
+                                                                    "untitled": "बिना शीर्षक"
+                                                                    }
+                                                                    }

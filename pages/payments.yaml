@@ -1,0 +1,17 @@
+id: payments
+route: /payments
+title: Payments
+roles: [Owner, Admin]
+entities:
+  - name: Transfer
+    fields:
+      - { key: "to", type: "string", required: true }
+      - { key: "amount", type: "money", required: true }
+      - { key: "note", type: "string", required: false, max: 120 }
+api:
+  base: /api/v1/ledger
+  endpoints:
+    - { method: POST, path: /, body: { to, amount, note }, auth: true }
+    - { method: GET,  path: /, query: { cursor }, auth: true }
+ui:
+  features: [UEIDResolveInline, confirmSheet, successReceipt]

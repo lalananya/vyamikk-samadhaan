@@ -1,5 +1,25 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+// Helper function to safely use AsyncStorage
+const safeAsyncStorage = {
+  getItem: async (key: string): Promise<string | null> => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return await AsyncStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    if (typeof window === 'undefined') return;
+    try {
+      await AsyncStorage.setItem(key, value);
+    } catch {
+      // Ignore errors in web environment
+    }
+  }
+};
+
 export interface FeatureFlags {
   post_login_onboarding: boolean;
   category_roles: boolean;
@@ -31,7 +51,14 @@ class FeatureFlagService {
 
   async initialize(): Promise<void> {
     try {
-      const stored = await AsyncStorage.getItem("feature_flags");
+      // Check if we're in a web environment
+      if (typeof window === 'undefined') {
+        this.flags = DEFAULT_FLAGS;
+        this.initialized = true;
+        return;
+      }
+      
+      const stored = await safeAsyncStorage.getItem("feature_flags");
       if (stored) {
         this.flags = { ...DEFAULT_FLAGS, ...JSON.parse(stored) };
       }
@@ -78,7 +105,7 @@ class FeatureFlagService {
   async setFlag(flag: keyof FeatureFlags, enabled: boolean): Promise<void> {
     this.flags[flag] = enabled;
     try {
-      await AsyncStorage.setItem("feature_flags", JSON.stringify(this.flags));
+      await safeAsyncStorage.setItem("feature_flags", JSON.stringify(this.flags));
     } catch (error) {
       console.error("Failed to save feature flags:", error);
     }
@@ -87,7 +114,7 @@ class FeatureFlagService {
   async setFlags(flags: Partial<FeatureFlags>): Promise<void> {
     this.flags = { ...this.flags, ...flags };
     try {
-      await AsyncStorage.setItem("feature_flags", JSON.stringify(this.flags));
+      await safeAsyncStorage.setItem("feature_flags", JSON.stringify(this.flags));
     } catch (error) {
       console.error("Failed to save feature flags:", error);
     }
@@ -100,7 +127,7 @@ class FeatureFlagService {
   async resetToDefaults(): Promise<void> {
     this.flags = { ...DEFAULT_FLAGS };
     try {
-      await AsyncStorage.setItem("feature_flags", JSON.stringify(this.flags));
+      await safeAsyncStorage.setItem("feature_flags", JSON.stringify(this.flags));
     } catch (error) {
       console.error("Failed to reset feature flags:", error);
     }

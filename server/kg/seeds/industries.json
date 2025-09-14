@@ -1,0 +1,136 @@
+[
+    {
+        "id": "urn:msme:entity:industry:manufacturing",
+        "type": "industry",
+        "canonicalName": "Manufacturing",
+        "aliases": [
+            {
+                "id": "alias-manufacturing-1",
+                "text": "Manufacturing",
+                "language": "en",
+                "type": "exact",
+                "confidence": 1.0,
+                "isApproved": true
+            },
+            {
+                "id": "alias-manufacturing-2",
+                "text": "Production",
+                "language": "en",
+                "type": "synonym",
+                "confidence": 0.9,
+                "isApproved": true
+            },
+            {
+                "id": "alias-manufacturing-3",
+                "text": "उत्पादन",
+                "language": "hi",
+                "type": "translation",
+                "confidence": 0.95,
+                "isApproved": true
+            },
+            {
+                "id": "alias-manufacturing-4",
+                "text": "MFG",
+                "language": "en",
+                "type": "abbreviation",
+                "confidence": 0.8,
+                "isApproved": true
+            }
+        ],
+        "metadata": {
+            "description": "Manufacturing and production industries",
+            "category": "Primary",
+            "tags": [
+                "production",
+                "factory",
+                "assembly"
+            ],
+            "isActive": true,
+            "usageCount": 0
+        }
+    },
+    {
+        "id": "urn:msme:entity:industry:textiles",
+        "type": "industry",
+        "canonicalName": "Textiles",
+        "aliases": [
+            {
+                "id": "alias-textiles-1",
+                "text": "Textiles",
+                "language": "en",
+                "type": "exact",
+                "confidence": 1.0,
+                "isApproved": true
+            },
+            {
+                "id": "alias-textiles-2",
+                "text": "वस्त्र",
+                "language": "hi",
+                "type": "translation",
+                "confidence": 0.95,
+                "isApproved": true
+            },
+            {
+                "id": "alias-textiles-3",
+                "text": "Garments",
+                "language": "en",
+                "type": "synonym",
+                "confidence": 0.85,
+                "isApproved": true
+            }
+        ],
+        "metadata": {
+            "description": "Textile and garment manufacturing",
+            "category": "Primary",
+            "tags": [
+                "fabric",
+                "clothing",
+                "garments"
+            ],
+            "isActive": true,
+            "usageCount": 0
+        }
+    },
+    {
+        "id": "urn:msme:entity:industry:food_processing",
+        "type": "industry",
+        "canonicalName": "Food Processing",
+        "aliases": [
+            {
+                "id": "alias-food-1",
+                "text": "Food Processing",
+                "language": "en",
+                "type": "exact",
+                "confidence": 1.0,
+                "isApproved": true
+            },
+            {
+                "id": "alias-food-2",
+                "text": "खाद्य प्रसंस्करण",
+                "language": "hi",
+                "type": "translation",
+                "confidence": 0.95,
+                "isApproved": true
+            },
+            {
+                "id": "alias-food-3",
+                "text": "Food & Beverage",
+                "language": "en",
+                "type": "synonym",
+                "confidence": 0.9,
+                "isApproved": true
+            }
+        ],
+        "metadata": {
+            "description": "Food and beverage processing industries",
+            "category": "Primary",
+            "tags": [
+                "food",
+                "beverage",
+                "processing"
+            ],
+            "isActive": true,
+            "usageCount": 0
+        }
+    }
+]

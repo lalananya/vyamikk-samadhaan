@@ -10,6 +10,10 @@ import {
   ScrollView,
   Modal,
 } from "react-native";
+import { TemplateUtils } from "../src/utils/TemplateUtils";
+import { ValidationUtils } from "../src/utils/ValidationUtils";
+import { AlertUtils } from "../src/utils/AlertUtils";
+import { apiService } from "../src/services/ApiService";
 import { router } from "expo-router";
 import { apiFetch } from "../src/api";
 import { getToken } from "../src/auth";
@@ -114,39 +118,7 @@ export default function LOIGenerator() {
   };
 
   const generateLOIPreview = () => {
-    return `
-LETTER OF INTENT
-
-Date: ${new Date().toLocaleDateString()}
-
-To: ${formData.employeeName}
-Phone: ${formData.employeePhone}
-
-Dear ${formData.employeeName},
-
-We are pleased to offer you a position as ${formData.jobTitle} with our organization.
-
-EMPLOYER DETAILS:
-Name: ${formData.employerName}
-Address: ${formData.employerAddress}
-
-POSITION DETAILS:
-Job Title: ${formData.jobTitle}
-Start Date: ${formData.startDate || "To be determined"}
-End Date: ${formData.endDate || "Ongoing"}
-Salary: ${formData.salary || "To be discussed"}
-Work Location: ${formData.workLocation || "To be determined"}
-
-TERMS AND CONDITIONS:
-${formData.terms || "Standard employment terms and conditions apply."}
-
-This letter of intent is subject to verification of your credentials and successful completion of any required background checks.
-
-Please acknowledge receipt of this letter by entering the OTP sent to your registered phone number.
-
-Sincerely,
-${formData.employerName}
-    `.trim();
+    return TemplateUtils.generateLOIPreview(formData);
   };
 
   return (

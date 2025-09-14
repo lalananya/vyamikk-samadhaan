@@ -4,6 +4,46 @@ import { featureFlags } from "../features/FeatureFlags";
 import { clearToken } from "../session/index";
 import { healthCheckService } from "../services/HealthCheckService";
 
+// Helper function to safely use AsyncStorage
+const safeAsyncStorage = {
+  getItem: async (key: string): Promise<string | null> => {
+    // Check if we're in a React Native environment
+    if (typeof window === 'undefined') return null;
+    try {
+      return await AsyncStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    // Check if we're in a React Native environment
+    if (typeof window === 'undefined') return;
+    try {
+      await AsyncStorage.setItem(key, value);
+    } catch {
+      // Ignore errors in web environment
+    }
+  },
+  removeItem: async (key: string): Promise<void> => {
+    // Check if we're in a React Native environment
+    if (typeof window === 'undefined') return;
+    try {
+      await AsyncStorage.removeItem(key);
+    } catch {
+      // Ignore errors in web environment
+    }
+  },
+  clear: async (): Promise<void> => {
+    // Check if we're in a React Native environment
+    if (typeof window === 'undefined') return;
+    try {
+      await AsyncStorage.clear();
+    } catch {
+      // Ignore errors in web environment
+    }
+  }
+};
+
 export interface UserState {
   id: string;
   phone: string;
@@ -11,7 +51,9 @@ export interface UserState {
   category?: string;
   registeredAt?: string;
   onboardingCompleted: boolean;
+  displayName?: string;
   currentOrganizationId?: string;
+  language?: string;
   organizations: {
     id: string;
     name: string;
@@ -31,7 +73,14 @@ class AppStateManager {
 
   async initialize(): Promise<void> {
     try {
-      const stored = await AsyncStorage.getItem("user_state");
+      // Check if we're in a web environment
+      if (typeof window === 'undefined') {
+        this.initialized = true;
+        this.notifyListeners();
+        return;
+      }
+      
+      const stored = await safeAsyncStorage.getItem("user_state");
       if (stored) {
         this.user = JSON.parse(stored);
       }
@@ -85,7 +134,7 @@ class AppStateManager {
   async setUser(user: UserState): Promise<void> {
     this.user = user;
     try {
-      await AsyncStorage.setItem("user_state", JSON.stringify(user));
+      await safeAsyncStorage.setItem("user_state", JSON.stringify(user));
       this.notifyListeners();
     } catch (error) {
       console.error("Failed to save user state:", error);
@@ -102,7 +151,7 @@ class AppStateManager {
 
     this.user = { ...this.user, ...updates };
     try {
-      await AsyncStorage.setItem("user_state", JSON.stringify(this.user));
+      await safeAsyncStorage.setItem("user_state", JSON.stringify(this.user));
       this.notifyListeners();
     } catch (error) {
       console.error("Failed to update user state:", error);
@@ -114,7 +163,7 @@ class AppStateManager {
 
     this.user.currentOrganizationId = organizationId;
     try {
-      await AsyncStorage.setItem("user_state", JSON.stringify(this.user));
+      await safeAsyncStorage.setItem("user_state", JSON.stringify(this.user));
       this.notifyListeners();
     } catch (error) {
       console.error("Failed to set current organization:", error);
@@ -126,11 +175,27 @@ class AppStateManager {
 
     this.user.onboardingCompleted = true;
     try {
-      await AsyncStorage.setItem("user_state", JSON.stringify(this.user));
+      await safeAsyncStorage.setItem("user_state", JSON.stringify(this.user));
       this.notifyListeners();
     } catch (error) {
       console.error("Failed to complete onboarding:", error);
     }
+  }
+
+  async setLanguage(language: string): Promise<void> {
+    if (!this.user) return;
+
+    this.user.language = language;
+    try {
+      await safeAsyncStorage.setItem("user_state", JSON.stringify(this.user));
+      this.notifyListeners();
+    } catch (error) {
+      console.error("Failed to set language:", error);
+    }
+  }
+
+  getLanguage(): string {
+    return this.user?.language || 'EN';
   }
 
   async logout(): Promise<void> {
@@ -138,7 +203,7 @@ class AppStateManager {
     this.setAuthState(false, "logout");
     this.stopHealthChecks();
     try {
-      await AsyncStorage.removeItem("user_state");
+      await safeAsyncStorage.removeItem("user_state");
       // Also clear token
       await clearToken();
       this.notifyListeners();
@@ -152,7 +217,7 @@ class AppStateManager {
     this.setAuthState(false, "clear_all_data");
     this.stopHealthChecks();
     try {
-      await AsyncStorage.clear();
+      await safeAsyncStorage.clear();
       // Also clear token
       await clearToken();
       this.notifyListeners();
@@ -200,7 +265,7 @@ class AppStateManager {
       }
 
       // Validate token with /me endpoint
-      const response = await fetch(`${this.getApiBase()}/me`, {
+      const response = await fetch(`${this.getApiBase()}/auth/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -256,7 +321,7 @@ class AppStateManager {
       return API_BASE;
     } catch (error) {
       console.error("Failed to get API base:", error);
-      return "http://192.168.29.242:4000/api/v1";
+      return "http://192.168.29.242:4001/api/v1";
     }
   }
 
@@ -266,26 +331,13 @@ class AppStateManager {
   }
 
   async trackAppOpen(): Promise<void> {
-    analytics.track({
-      event: "app_open",
-      properties: {
-        userId: this.user?.id,
-        hasOrganization: this.hasOrganizationContext(),
-        onboardingCompleted: this.user?.onboardingCompleted || false,
-      },
-      timestamp: new Date(),
-    });
+    // Analytics tracking temporarily disabled
+    console.log("📊 App opened for user:", this.user?.id);
   }
 
   async trackSessionStart(): Promise<void> {
-    analytics.track({
-      event: "session_start",
-      properties: {
-        userId: this.user?.id,
-        timestamp: new Date().toISOString(),
-      },
-      timestamp: new Date(),
-    });
+    // Analytics tracking temporarily disabled
+    console.log("📊 Session started for user:", this.user?.id);
   }
 
   startHealthChecks(): void {

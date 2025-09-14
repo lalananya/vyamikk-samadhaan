@@ -8,7 +8,7 @@ const INDIAN_MOBILE_REGEX = /^(?:\+91|0)?[6-9]\d{9}$/;
  * @returns true if valid Indian mobile format
  */
 export function isValidIndianMobile(phone: string): boolean {
-  return INDIAN_MOBILE_REGEX.test(phone);
+    return INDIAN_MOBILE_REGEX.test(phone);
 }
 
 /**
@@ -18,29 +18,19 @@ export function isValidIndianMobile(phone: string): boolean {
  * @throws Error if invalid format
  */
 export function toE164India(phone: string): string {
-  // Remove all non-digits
-  const digits = phone.replace(/\D/g, "");
+    // Remove all non-digits
+    const digits = phone.replace(/\D/g, '');
 
-  // Handle different input formats
-  if (digits.length === 10 && digits[0] >= "6" && digits[0] <= "9") {
-    return `+91${digits}`;
-  } else if (
-    digits.length === 11 &&
-    digits[0] === "0" &&
-    digits[1] >= "6" &&
-    digits[1] <= "9"
-  ) {
-    return `+91${digits.substring(1)}`;
-  } else if (
-    digits.length === 12 &&
-    digits.startsWith("91") &&
-    digits[2] >= "6" &&
-    digits[2] <= "9"
-  ) {
-    return `+${digits}`;
-  }
+    // Handle different input formats
+    if (digits.length === 10 && digits[0] >= '6' && digits[0] <= '9') {
+        return `+91${digits}`;
+    } else if (digits.length === 11 && digits[0] === '0' && digits[1] >= '6' && digits[1] <= '9') {
+        return `+91${digits.substring(1)}`;
+    } else if (digits.length === 12 && digits.startsWith('91') && digits[2] >= '6' && digits[2] <= '9') {
+        return `+${digits}`;
+    }
 
-  throw new Error("Invalid Indian mobile number format");
+    throw new Error('Invalid Indian mobile number format');
 }
 
 /**
@@ -49,13 +39,13 @@ export function toE164India(phone: string): string {
  * @returns Formatted phone number for display
  */
 export function formatPhoneDisplay(phone: string): string {
-  try {
-    const canonical = toE164India(phone);
-    // Display as +91 XXXXX XXXXX
-    return canonical.replace(/(\+91)(\d{5})(\d{5})/, "$1 $2 $3");
-  } catch {
-    return phone; // Return original if can't format
-  }
+    try {
+        const canonical = toE164India(phone);
+        // Display as +91 XXXXX XXXXX
+        return canonical.replace(/(\+91)(\d{5})(\d{5})/, '$1 $2 $3');
+    } catch {
+        return phone; // Return original if can't format
+    }
 }
 
 /**
@@ -64,10 +54,10 @@ export function formatPhoneDisplay(phone: string): string {
  * @returns Last 4 digits
  */
 export function getPhoneLast4(phone: string): string {
-  try {
-    const canonical = toE164India(phone);
-    return canonical.slice(-4);
-  } catch {
-    return phone.slice(-4); // Fallback to last 4 of input
-  }
+    try {
+        const canonical = toE164India(phone);
+        return canonical.slice(-4);
+    } catch {
+        return phone.slice(-4); // Fallback to last 4 of input
+    }
 }

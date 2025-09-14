@@ -1,0 +1,17 @@
+id: outages
+route: /outages
+title: Power Outages
+roles: [Owner, Admin, Manager]
+entities:
+  - name: Outage
+    fields:
+      - { key: "start", type: "datetime", required: true }
+      - { key: "end", type: "datetime", required: true }
+      - { key: "note", type: "string", required: false }
+api:
+  base: /api/v1/outages
+  endpoints:
+    - { method: POST, path: /, body: { start, end, note }, auth: true }
+    - { method: GET,  path: /, query: { from, to }, auth: true }
+ui:
+  features: [sparkline, exportCSV, shiftImpactFlag]

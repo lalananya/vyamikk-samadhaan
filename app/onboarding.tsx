@@ -11,32 +11,52 @@ import {
 import { router } from "expo-router";
 import { request } from "../src/net/http";
 import { analytics } from "../src/analytics/AnalyticsService";
-import AuthenticatedLayout from "../src/layouts/AuthenticatedLayout";
 import { appState } from "../src/state/AppState";
+import NavigationHeader from "../src/components/NavigationHeader";
+import { useNavigation } from "../src/contexts/NavigationContext";
 
-// Categories and their types
+// Role types for first-time onboarding
+const ROLE_TYPES = [
+  {
+    id: "professional",
+    label: "Professional",
+    icon: "👨‍💼",
+    description: "Independent professional, consultant, or freelancer",
+    color: "#4A90E2"
+  },
+  {
+    id: "organisation",
+    label: "Organisation",
+    icon: "🏢",
+    description: "Business, company, or organization",
+    color: "#7ED321"
+  }
+];
+
+// Categories and their types (shown after role selection)
 const CATEGORIES = [
-  { id: "micro_unit", label: "Micro Unit", icon: "🏭", requiresEntity: true },
-  { id: "small_unit", label: "Small Unit", icon: "🏢", requiresEntity: true },
+  { id: "msme", label: "MSME", icon: "🏭", requiresEntity: true, description: "Micro, Small & Medium Enterprise" },
   {
     id: "professional",
     label: "Professional",
     icon: "👨‍💼",
     requiresEntity: false,
+    description: "Independent Professional"
   },
-  { id: "ca", label: "CA", icon: "📊", requiresEntity: false },
-  { id: "advocate", label: "Advocate", icon: "⚖️", requiresEntity: false },
-  { id: "lawyer", label: "Lawyer", icon: "⚖️", requiresEntity: false },
-  { id: "labour", label: "Labour", icon: "👷", requiresEntity: false },
-  { id: "supervisor", label: "Supervisor", icon: "👨‍💼", requiresEntity: false },
-  { id: "accountant", label: "Accountant", icon: "📈", requiresEntity: false },
+  { id: "ca", label: "CA", icon: "📊", requiresEntity: false, description: "Chartered Accountant" },
+  { id: "advocate", label: "Advocate", icon: "⚖️", requiresEntity: false, description: "Legal Professional" },
+  { id: "lawyer", label: "Lawyer", icon: "⚖️", requiresEntity: false, description: "Legal Professional" },
+  { id: "labour", label: "Labour", icon: "👷", requiresEntity: false, description: "Workforce Member" },
+  { id: "supervisor", label: "Supervisor", icon: "👨‍💼", requiresEntity: false, description: "Team Leader" },
+  { id: "accountant", label: "Accountant", icon: "📈", requiresEntity: false, description: "Financial Professional" },
   {
     id: "owner_partner",
     label: "Owner/Partner",
     icon: "👑",
     requiresEntity: true,
+    description: "Business Owner"
   },
-  { id: "director", label: "Director", icon: "🎯", requiresEntity: true },
+  { id: "director", label: "Director", icon: "🎯", requiresEntity: true, description: "Board Member" },
 ];
 
 const LEGAL_ENTITIES = [
@@ -95,6 +115,7 @@ const INDIAN_STATES = [
 ];
 
 interface OnboardingData {
+  role: string; // "professional" or "organisation"
   category: string;
   legalEntity?: string;
   displayName: string;
@@ -110,11 +131,13 @@ interface OnboardingData {
 export default function OnboardingScreen() {
   const [currentStep, setCurrentStep] = useState(0);
   const [data, setData] = useState<OnboardingData>({
+    role: "",
     category: "",
     displayName: "",
     location: { city: "", state: "" },
   });
   const [loading, setLoading] = useState(false);
+  const navigation = useNavigation();
 
   useEffect(() => {
     // Track onboarding start
@@ -122,11 +145,28 @@ export default function OnboardingScreen() {
       event: "onboarding_start",
       properties: {
         step: currentStep,
-        totalSteps: 3,
+        totalSteps: 4, // Now includes role selection step
       },
       timestamp: new Date(),
     });
   }, []);
+
+  const handleRoleSelect = (roleId: string) => {
+    setData((prev) => ({ ...prev, role: roleId }));
+
+    // Track role selection
+    analytics.track({
+      event: "role_selected",
+      properties: {
+        roleId,
+        roleLabel: ROLE_TYPES.find(r => r.id === roleId)?.label,
+      },
+      timestamp: new Date(),
+    });
+
+    // Move to category selection step
+    setCurrentStep(1);
+  };
 
   const handleCategorySelect = (categoryId: string) => {
     const category = CATEGORIES.find((c) => c.id === categoryId);
@@ -141,16 +181,17 @@ export default function OnboardingScreen() {
         categoryId,
         categoryLabel: category.label,
         requiresEntity: category.requiresEntity,
+        role: data.role,
       },
       timestamp: new Date(),
     });
 
     // Auto-advance to next step
     if (category.requiresEntity) {
-      setCurrentStep(1);
+      setCurrentStep(2);
     } else {
       // Skip legal entity step for professionals
-      setCurrentStep(2);
+      setCurrentStep(3);
     }
   };
 
@@ -163,11 +204,12 @@ export default function OnboardingScreen() {
       properties: {
         entityId,
         categoryId: data.category,
+        role: data.role,
       },
       timestamp: new Date(),
     });
 
-    setCurrentStep(2);
+    setCurrentStep(3);
   };
 
   const handleComplete = async () => {
@@ -178,6 +220,7 @@ export default function OnboardingScreen() {
       await request("/user/onboarding/complete", {
         method: "POST",
         json: {
+          role: data.role,
           category: data.category,
           legalEntity: data.legalEntity,
           displayName: data.displayName,
@@ -189,8 +232,9 @@ export default function OnboardingScreen() {
         },
       });
 
-      // Update app state with category
+      // Update app state with role and category
       await appState.updateUser({
+        role: data.role,
         category: data.category,
         onboardingCompleted: true,
       });
@@ -212,6 +256,7 @@ export default function OnboardingScreen() {
       analytics.track({
         event: "onboarding_complete",
         properties: {
+          role: data.role,
           category: data.category,
           hasLegalEntity: !!data.legalEntity,
           hasSpecializations: !!data.specializations?.length,
@@ -220,12 +265,8 @@ export default function OnboardingScreen() {
         timestamp: new Date(),
       });
 
-      // Reset boot sequence to trigger re-evaluation
-      const { bootSequence } = await import("../src/boot/BootSequence");
-      bootSequence.reset();
-
-      // Let BootGuard handle the routing based on updated user state
-      // No manual navigation needed
+      // Navigate directly to dashboard after onboarding completion
+      router.replace("/dashboard");
     } catch (error) {
       console.error("Failed to complete onboarding:", error);
       Alert.alert("Error", "Failed to complete onboarding. Please try again.");
@@ -237,10 +278,12 @@ export default function OnboardingScreen() {
   const canProceed = () => {
     switch (currentStep) {
       case 0:
-        return !!data.category;
+        return !!data.role;
       case 1:
-        return !!data.legalEntity;
+        return !!data.category;
       case 2:
+        return !!data.legalEntity;
+      case 3:
         return !!(
           data.displayName &&
           data.location.city &&
@@ -254,10 +297,12 @@ export default function OnboardingScreen() {
   const getStepTitle = () => {
     switch (currentStep) {
       case 0:
-        return "Choose Your Category";
+        return "Choose Your Role";
       case 1:
-        return "Select Legal Entity";
+        return "Choose Your Category";
       case 2:
+        return "Select Legal Entity";
+      case 3:
         return "Organization Basics";
       default:
         return "Onboarding";
@@ -267,66 +312,106 @@ export default function OnboardingScreen() {
   const getStepDescription = () => {
     switch (currentStep) {
       case 0:
-        return "Select the category that best describes your role or business type.";
+        return "Are you a professional or representing an organization?";
       case 1:
-        return "Choose the legal structure of your business.";
+        return "Select the category that best describes your role or business type.";
       case 2:
+        return "Choose the legal structure of your business.";
+      case 3:
         return "Provide basic information about your organization.";
       default:
         return "";
     }
   };
 
+  const handleBack = () => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+    } else {
+      // If on first step, go back to login
+      router.back();
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await appState.clearAllData();
+      // Navigate directly to login after logout
+      router.replace("/login");
+    } catch (error) {
+      console.error("Failed to logout:", error);
+    }
+  };
+
   return (
-    <AuthenticatedLayout title={getStepTitle()} showFooter={false}>
-      <View style={styles.container}>
-        {/* Progress Indicator */}
+    <View style={styles.fullContainer}>
+      <NavigationHeader
+        title={getStepTitle()}
+        showBackButton={true}
+        onBackPress={handleBack}
+        rightComponent={
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={handleLogout}
+          >
+            <Text style={styles.logoutButtonText}>Logout</Text>
+          </TouchableOpacity>
+        }
+      />
+
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        {/* Progress Bar */}
         <View style={styles.progressContainer}>
           <View style={styles.progressBar}>
             <View
               style={[
                 styles.progressFill,
-                { width: `${((currentStep + 1) / 3) * 100}%` },
+                { width: `${((currentStep + 1) / 4) * 100}%` },
               ]}
             />
           </View>
-          <Text style={styles.progressText}>Step {currentStep + 1} of 3</Text>
+          <Text style={styles.progressText}>Step {currentStep + 1} of 4</Text>
         </View>
 
         {/* Step Description */}
         <Text style={styles.stepDescription}>{getStepDescription()}</Text>
 
         {/* Step Content */}
-        <ScrollView
-          style={styles.stepContent}
-          showsVerticalScrollIndicator={false}
-        >
+        <View style={styles.stepContent}>
           {currentStep === 0 && (
-            <CategoryStep
-              selectedCategory={data.category}
-              onSelect={handleCategorySelect}
+            <RoleSelectionStep
+              selectedRole={data.role}
+              onSelect={handleRoleSelect}
             />
           )}
 
           {currentStep === 1 && (
+            <CategoryStep
+              selectedCategory={data.category}
+              onSelect={handleCategorySelect}
+              role={data.role}
+            />
+          )}
+
+          {currentStep === 2 && (
             <LegalEntityStep
               selectedEntity={data.legalEntity}
               onSelect={handleLegalEntitySelect}
             />
           )}
 
-          {currentStep === 2 && (
+          {currentStep === 3 && (
             <OrgBasicsStep
               data={data}
               onChange={setData}
               category={data.category}
             />
           )}
-        </ScrollView>
+        </View>
 
         {/* Navigation */}
         <View style={styles.navigation}>
-          {currentStep < 2 ? (
+          {currentStep < 3 ? (
             <TouchableOpacity
               style={[
                 styles.nextButton,
@@ -352,18 +437,57 @@ export default function OnboardingScreen() {
             </TouchableOpacity>
           )}
         </View>
-      </View>
-    </AuthenticatedLayout>
+      </ScrollView>
+    </View>
   );
 }
 
 // Step Components
+function RoleSelectionStep({
+  selectedRole,
+  onSelect,
+}: {
+  selectedRole: string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <View style={styles.rolesContainer}>
+      {ROLE_TYPES.map((role) => (
+        <TouchableOpacity
+          key={role.id}
+          style={[
+            styles.roleCard,
+            selectedRole === role.id && styles.roleCardSelected,
+            { borderColor: role.color },
+          ]}
+          onPress={() => onSelect(role.id)}
+        >
+          <View style={[styles.roleIconContainer, { backgroundColor: role.color }]}>
+            <Text style={styles.roleIcon}>{role.icon}</Text>
+          </View>
+          <View style={styles.roleContent}>
+            <Text style={styles.roleLabel}>{role.label}</Text>
+            <Text style={styles.roleDescription}>{role.description}</Text>
+          </View>
+          {selectedRole === role.id && (
+            <View style={[styles.roleCheckmark, { backgroundColor: role.color }]}>
+              <Text style={styles.roleCheckmarkText}>✓</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
 function CategoryStep({
   selectedCategory,
   onSelect,
+  role,
 }: {
   selectedCategory: string;
   onSelect: (id: string) => void;
+  role?: string;
 }) {
   return (
     <View style={styles.categoriesGrid}>
@@ -378,6 +502,7 @@ function CategoryStep({
         >
           <Text style={styles.categoryIcon}>{category.icon}</Text>
           <Text style={styles.categoryLabel}>{category.label}</Text>
+          <Text style={styles.categoryDescription}>{category.description}</Text>
         </TouchableOpacity>
       ))}
     </View>
@@ -507,7 +632,7 @@ function OrgBasicsStep({
                 style={[
                   styles.specializationChip,
                   data.specializations?.includes(spec) &&
-                    styles.specializationChipSelected,
+                  styles.specializationChipSelected,
                 ]}
                 onPress={() => {
                   const current = data.specializations || [];
@@ -535,7 +660,7 @@ function OrgBasicsStep({
                 style={[
                   styles.stateOption,
                   data.serviceAreas?.includes(state) &&
-                    styles.stateOptionSelected,
+                  styles.stateOptionSelected,
                 ]}
                 onPress={() => {
                   const current = data.serviceAreas || [];
@@ -556,12 +681,35 @@ function OrgBasicsStep({
 }
 
 const styles = StyleSheet.create({
+  fullContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
   container: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 24,
   },
   progressContainer: {
     marginBottom: 24,
+  },
+  logoutButton: {
+    backgroundColor: "#ff4444",
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginLeft: 16,
+  },
+  logoutButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "500",
   },
   progressBar: {
     height: 4,
@@ -583,11 +731,67 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#ccc",
     textAlign: "center",
-    marginBottom: 24,
-    lineHeight: 22,
+    marginBottom: 32,
+    lineHeight: 24,
+    paddingHorizontal: 16,
   },
   stepContent: {
     flex: 1,
+    marginBottom: 24,
+  },
+  // Role Selection Styles
+  rolesContainer: {
+    gap: 16,
+  },
+  roleCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#111",
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 2,
+    borderColor: "#333",
+  },
+  roleCardSelected: {
+    borderColor: "#007AFF",
+    backgroundColor: "#001a33",
+  },
+  roleIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  roleIcon: {
+    fontSize: 24,
+  },
+  roleContent: {
+    flex: 1,
+  },
+  roleLabel: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#fff",
+    marginBottom: 4,
+  },
+  roleDescription: {
+    fontSize: 14,
+    color: "#ccc",
+    lineHeight: 20,
+  },
+  roleCheckmark: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  roleCheckmarkText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
   },
   categoriesGrid: {
     flexDirection: "row",
@@ -602,20 +806,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#333",
+    minHeight: 120,
   },
   categoryCardSelected: {
     borderColor: "#007AFF",
     backgroundColor: "#001a33",
   },
   categoryIcon: {
-    fontSize: 32,
+    fontSize: 28,
     marginBottom: 8,
   },
   categoryLabel: {
-    fontSize: 14,
+    fontSize: 16,
     color: "#fff",
     textAlign: "center",
-    fontWeight: "500",
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  categoryDescription: {
+    fontSize: 11,
+    color: "#999",
+    textAlign: "center",
+    lineHeight: 14,
   },
   entitiesList: {
     gap: 12,
@@ -713,7 +925,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   navigation: {
-    paddingTop: 24,
+    paddingTop: 20,
+    paddingBottom: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#333",
   },
   nextButton: {
     backgroundColor: "#007AFF",

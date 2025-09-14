@@ -1,11 +1,13 @@
 const express = require("express");
 const cors = require("cors");
 const { v4: uuidv4 } = require("uuid");
+const { z } = require("zod");
 const { db } = require("./db");
 const { encrypt, decrypt, hash } = require("./crypto");
-const { generateSecret, verify } = require("./totp");
+const { generateSecret, verify: verifyTotp } = require("./totp");
 const {
   sign,
+  verify,
   requireAuth,
   canonicalizeIndianMobile,
   hashPhone,
@@ -24,19 +26,63 @@ const {
   validateRole,
   roleSchema,
   roleChangeSchema,
+  isValidIndianMobile,
 } = require("./auth");
 const { addEvent, bumpScoreOn } = require("./trust");
 const { generateLoiPdf } = require("./pdf");
 const mlClient = require("./mlClient");
 const searchPipeline = require("./searchPipeline");
+const { initializeSocket } = require("./realtime/socket");
+
+// Import new routes
+const directoryRoutes = require("./routes/directory");
+const chatRoutes = require("./routes/chat");
+
+// Import PageForge generated routes
+const attendanceRoutes = require("./routes/attendance");
+const shiftPlannerRoutes = require("./routes/shift-planner");
+const payrollRoutes = require("./routes/payroll");
+const paymentsRoutes = require("./routes/payments");
+const outagesRoutes = require("./routes/outages");
+const settingsRoutes = require("./routes/settings");
 
 const app = express();
 
 // CORS: allow Expo dev and tunnels
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
 
-const PORT = process.env.PORT || 4000;
+// Handle both JSON and plain text requests
+app.use(express.json());
+app.use(express.text({ type: 'text/plain' }));
+
+// Custom middleware to handle plain text JSON
+app.use((req, res, next) => {
+  if (req.get('Content-Type') === 'text/plain;charset=UTF-8' && req.body) {
+    try {
+      req.body = JSON.parse(req.body);
+      console.log('🔧 Converted plain text to JSON:', req.body);
+    } catch (error) {
+      console.log('🔧 Failed to parse plain text as JSON:', error.message);
+    }
+  }
+  next();
+});
+
+// API v1 routes - all routes are defined with full paths
+
+// Mount new routes
+app.use("/api/v1/directory", directoryRoutes);
+app.use("/api/v1/chat", chatRoutes);
+
+// Mount PageForge generated routes
+app.use("/api/v1/attendance", attendanceRoutes);
+app.use("/api/v1/shifts", shiftPlannerRoutes);
+app.use("/api/v1/payroll", payrollRoutes);
+app.use("/api/v1/payments", paymentsRoutes);
+app.use("/api/v1/outages", outagesRoutes);
+app.use("/api/v1/settings", settingsRoutes);
+
+const PORT = process.env.PORT || 4001;
 
 // Admin guard helper
 function adminGuard(req, res, next) {
@@ -53,14 +99,14 @@ app.get("/", (req, res) => {
     name: "Vyaamik Samadhaan API",
     port: PORT,
     routes: [
-      "/signup",
-      "/totp/verify",
-      "/login",
-      "/me",
-      "/ledger",
-      "/loi",
-      "/attendance",
-      "/approvals",
+      "/api/v1/auth/signup",
+      "/api/v1/auth/totp/verify",
+      "/api/v1/auth/login",
+      "/api/v1/auth/me",
+      "/api/v1/ledger",
+      "/api/v1/loi",
+      "/api/v1/attendance",
+      "/api/v1/approvals",
     ],
   });
 });
@@ -71,16 +117,314 @@ app.get("/health", (req, res) => {
   res.json({ ok: true, ts: Date.now() });
 });
 
+// API v1 health endpoint
+app.get("/api/v1/health", (req, res) => {
+  res.json({ ok: true, ts: Date.now(), version: "v1" });
+});
+
+// Test route
+app.post("/api/v1/test", (req, res) => {
+  res.json({ ok: true, message: "Test route working" });
+});
+
+// Debug echo endpoint
+app.post("/api/v1/debug/echo", (req, res) => {
+  console.log("🔧 Echo request body:", req.body);
+  console.log("🔧 Echo headers:", req.headers);
+  res.json({ 
+    ok: true, 
+    received: req.body,
+    headers: req.headers,
+    timestamp: Date.now()
+  });
+});
+
 app.get("/debug/ping", (req, res) => {
   res.json({ ok: true, now: Date.now() });
+});
+
+// Two-step login: Step 1 - Get OTP token (for mobile app)
+app.post("/api/v1/auth/login", (req, res) => {
+  try {
+    console.log("🔧 Login request body:", req.body);
+
+    // Handle both single-step and two-step login
+    const bodySchema = z.object({
+      phone: z.string().refine(isValidIndianMobile, 'Invalid Indian mobile number format'),
+      totpCode: z.string().regex(/^\d{6}$/, 'TOTP code must be 6 digits').optional(),
+      otp: z.string().regex(/^\d{6}$/, 'OTP code must be 6 digits').optional(),
+      otpToken: z.string().optional()
+    });
+
+    const { phone, totpCode, otp, otpToken } = bodySchema.parse(req.body);
+
+    // Canonicalize phone number
+    const phoneCanonical = canonicalizeIndianMobile(phone);
+    console.log("🔧 Canonicalized phone:", phoneCanonical);
+
+    // If this is a two-step login (only phone provided)
+    if (!totpCode && !otp && !otpToken) {
+      // Check if user exists
+      const user = db.get(
+        "SELECT id, phone, role FROM users WHERE phone_canonical = ?",
+        [phoneCanonical]
+      );
+
+      if (!user) {
+        return res.status(404).json({
+          ok: false,
+          error: "User not found"
+        });
+      }
+
+      // Generate OTP token (in real app, this would trigger SMS)
+      const otpToken = uuidv4();
+      console.log("🔧 Generated OTP token:", otpToken);
+
+      return res.json({
+        ok: true,
+        otpToken,
+        resendIn: 60
+      });
+    }
+
+    // If this is a single-step login with OTP (for backward compatibility)
+    if (totpCode || otp) {
+      const totpCodeToUse = totpCode || otp;
+
+      // Get user and TOTP secret
+      const user = db.get(
+        `
+        SELECT u.id, u.phone, u.role, u.onboardingCompleted, v.vpiId, ts.secret_enc, ts.iv, ts.tag, ts.active
+        FROM users u
+        JOIN vpi v ON u.id = v.userId
+        JOIN totp_secrets ts ON u.id = ts.userId
+        WHERE u.phone_canonical = ?
+      `,
+        [phoneCanonical],
+      );
+
+      if (!user) {
+        return res.status(404).json({
+          ok: false,
+          error: "User not found or TOTP not verified",
+        });
+      }
+
+      // In dev mode, accept any OTP as valid
+      if (process.env.DEV_NO_TOTP === "1") {
+        console.log("🔓 DEV MODE: Accepting any OTP code:", totpCodeToUse);
+      } else {
+        // In production, verify TOTP properly
+        const secret = decrypt({
+          ciphertext: user.secret_enc,
+          iv: user.iv,
+          tag: user.tag,
+        });
+
+        if (!verify(totpCodeToUse, secret)) {
+          return res.status(400).json({
+            ok: false,
+            error: "Invalid OTP code",
+          });
+        }
+      }
+
+      // Generate JWT token
+      const token = sign({ userId: user.id, vpiId: user.vpiId, role: user.role });
+
+      // Map internal role to external role
+      const roleMap = { employer: "organisation", labour: "professional" };
+      const externalRole = roleMap[user.role] || user.role;
+
+      return res.json({
+        ok: true,
+        token,
+        vpiId: user.vpiId,
+        role: externalRole,
+        roles: [externalRole],
+        defaultRole: externalRole,
+        onboardingCompleted: Boolean(user.onboardingCompleted),
+        orgId: null,
+      });
+    }
+
+    // If we get here, it's an invalid request
+    return res.status(400).json({
+      ok: false,
+      error: "Invalid request format"
+    });
+  } catch (error) {
+    console.error("🔧 Login error:", error);
+    if (error.name === "ZodError") {
+      return res.status(400).json({
+        ok: false,
+        error: "Validation error",
+        details: error.errors,
+      });
+    }
+    res.status(500).json({
+      ok: false,
+      error: "Internal server error",
+    });
+  }
+});
+
+// Get user profile (requires auth)
+app.get("/api/v1/auth/me", (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        ok: false,
+        error: "Authorization header missing or invalid"
+      });
+    }
+
+    const token = authHeader.substring(7);
+    
+    // In dev mode, accept any token
+    if (process.env.DEV_NO_TOTP === "1") {
+      console.log("🔓 DEV MODE: Accepting any token for /me");
+      
+      // Get the first user as a mock response
+      const user = db.get("SELECT * FROM users LIMIT 1");
+      if (!user) {
+        return res.status(404).json({
+          ok: false,
+          error: "User not found"
+        });
+      }
+
+      return res.json({
+        ok: true,
+        authenticated: true,
+        profile: {
+          id: user.id,
+          phone: user.phone,
+          role: user.role,
+          category: user.role,
+          registered_at: user.createdAt,
+          onboarding_complete: false
+        },
+        memberships: []
+      });
+    }
+
+    // In production, verify JWT token
+    try {
+      const decoded = verify(token, process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'dev-secret');
+      const user = db.get("SELECT * FROM users WHERE id = ?", decoded.userId || decoded.sub);
+      
+      if (!user) {
+        return res.status(404).json({
+          ok: false,
+          error: "User not found"
+        });
+      }
+
+      res.json({
+        ok: true,
+        authenticated: true,
+        profile: {
+          id: user.id,
+          phone: user.phone,
+          role: user.role,
+          category: user.role,
+          registered_at: user.createdAt,
+          onboarding_complete: user.onboardingCompleted || false
+        },
+        memberships: []
+      });
+    } catch (jwtError) {
+      console.error("JWT verification failed:", jwtError.message);
+      return res.status(401).json({
+        ok: false,
+        error: "Invalid token"
+      });
+    }
+  } catch (error) {
+    console.error("❌ /me error:", error);
+    res.status(500).json({
+      ok: false,
+      error: "Internal server error"
+    });
+  }
+});
+
+// Two-step login: Step 2 - Verify OTP (for mobile app)
+app.post("/api/v1/auth/verify", (req, res) => {
+  try {
+    console.log("🔧 Verify request body:", req.body);
+    console.log("🔧 Verify request headers:", req.headers);
+
+    const { otpToken, code } = z.object({
+      otpToken: z.string().min(1, 'OTP token is required'),
+      code: z.string().regex(/^\d{6}$/, 'OTP code must be 6 digits')
+    }).parse(req.body);
+
+    // In dev mode, accept any OTP token and any code as valid
+    if (process.env.DEV_NO_TOTP === "1") {
+      console.log("🔓 DEV MODE: Accepting any OTP token and code:", { otpToken, code });
+    } else {
+      // In production, verify OTP properly
+      return res.status(400).json({
+        ok: false,
+        error: "OTP verification not implemented in production mode"
+      });
+    }
+
+    // Get user from OTP token (in real app, this would be stored in Redis)
+    // For now, we'll get the first user as a workaround
+    const user = db.get("SELECT * FROM users LIMIT 1");
+    if (!user) {
+      return res.status(404).json({
+        ok: false,
+        error: "User not found"
+      });
+    }
+
+    // Generate JWT tokens
+    const accessJwt = sign({ userId: user.id, vpiId: user.id, role: user.role });
+    const refreshJwt = sign({ userId: user.id, type: 'refresh' });
+
+    res.json({
+      ok: true,
+      accessJwt,
+      refreshJwt,
+      user: {
+        id: user.id,
+        phone: user.phone,
+        role: user.role,
+        category: user.role,
+        createdAt: new Date(user.createdAt).toISOString(),
+        onboardingCompleted: Boolean(user.onboardingCompleted),
+        organizations: []
+      }
+    });
+  } catch (error) {
+    console.error("🔧 Verify error:", error);
+    if (error.name === "ZodError") {
+      return res.status(400).json({
+        ok: false,
+        error: "Validation error",
+        details: error.errors
+      });
+    }
+    res.status(500).json({
+      ok: false,
+      error: "Internal server error"
+    });
+  }
 });
 
 // AUTH & VPI ENDPOINTS
 
 // Signup
-app.post("/signup", (req, res) => {
+app.post("/api/v1/auth/signup", (req, res) => {
   try {
     const { phone, role } = signupSchema.parse(req.body);
+    const now = Date.now();
 
     // Canonicalize phone number
     const phoneCanonical = canonicalizeIndianMobile(phone);
@@ -135,7 +479,6 @@ app.post("/signup", (req, res) => {
 
     const userId = uuidv4();
     const vpiId = uuidv4();
-    const now = Date.now();
 
     // Generate TOTP secret
     const secret = generateSecret();
@@ -199,7 +542,7 @@ app.post("/signup", (req, res) => {
 });
 
 // TOTP Verify
-app.post("/totp/verify", (req, res) => {
+app.post("/api/v1/auth/totp/verify", (req, res) => {
   try {
     const { phone, code } = totpVerifySchema.parse(req.body);
 
@@ -278,8 +621,8 @@ app.post("/totp/verify", (req, res) => {
   }
 });
 
-// Login
-app.post("/login", (req, res) => {
+// Login (old single-step)
+app.post("/api/v1/auth/login-old", (req, res) => {
   try {
     const { phone, totpCode, otp } = loginSchema.parse(req.body);
     const totpCodeToUse = totpCode || otp; // Support both field names
@@ -294,7 +637,7 @@ app.post("/login", (req, res) => {
       FROM users u
       JOIN vpi v ON u.id = v.userId
       JOIN totp_secrets ts ON u.id = ts.userId
-      WHERE u.phone_canonical = ? AND ts.active = 1
+      WHERE u.phone_canonical = ?
     `,
       [phoneCanonical],
     );
@@ -362,53 +705,7 @@ app.post("/login", (req, res) => {
   }
 });
 
-// Get user profile
-app.get("/me", requireAuth, (req, res) => {
-  try {
-    const { vpiId } = req.auth;
-
-    const user = db.get(
-      `
-      SELECT u.phone, u.phone_last4, u.role, u.role_locked, u.onboardingCompleted, v.vpiId, u.orgId, v.trustScore
-      FROM users u
-      JOIN vpi v ON u.id = v.userId
-      WHERE v.vpiId = ?
-    `,
-      [vpiId],
-    );
-
-    if (!user) {
-      return res.status(404).json({
-        ok: false,
-        error: "User not found",
-      });
-    }
-
-    // Map internal role to external role
-    const roleMap = { employer: "organisation", labour: "professional" };
-    const externalRole = roleMap[user.role] || user.role;
-
-    res.json({
-      ok: true,
-      phone: user.phone,
-      phoneLast4: user.phone_last4,
-      vpiId: user.vpiId,
-      role: externalRole,
-      role_locked: user.role_locked,
-      roles: [externalRole],
-      defaultRole: externalRole,
-      onboardingCompleted: Boolean(user.onboardingCompleted),
-      orgId: user.orgId,
-      trustScore: user.trustScore,
-    });
-  } catch (error) {
-    console.error("Get profile error:", error);
-    res.status(500).json({
-      ok: false,
-      error: "Internal server error",
-    });
-  }
-});
+// Duplicate endpoint removed - handled above
 
 // PINCODE ENDPOINT
 
@@ -1405,30 +1702,175 @@ if (process.env.ML_SEARCH === "1") {
   });
 }
 
-// Start server
-app.listen(PORT, "0.0.0.0", () => {
+// Catch-all 404 handler - MUST be last
+// Simple single-step login (for development - accepts any 10-digit number and any OTP)
+app.post("/api/v1/auth/simple-login", async (req, res) => {
+  try {
+    console.log("🔧 Simple login request body:", req.body);
+    console.log("🔧 Request headers:", req.headers);
+    console.log("🔧 Content-Type:", req.get('Content-Type'));
+    console.log("🔧 Body type:", typeof req.body);
+    console.log("🔧 Body keys:", Object.keys(req.body || {}));
+    console.log("🔧 Raw body length:", JSON.stringify(req.body).length);
+
+    const { phone, otp } = z.object({
+      phone: z.string().min(10, "Phone number is required"),
+      otp: z.string().min(1, "OTP is required"),
+    }).parse(req.body);
+
+    // Accept any 10-digit number
+    if (!/^\d{10}$/.test(phone)) {
+      return res.status(400).json({
+        ok: false,
+        error: "Phone number must be 10 digits",
+      });
+    }
+
+    // Accept any OTP
+    console.log("🔓 DEV MODE: Accepting any phone and OTP:", { phone, otp });
+
+    // Create or find user
+    const canonicalPhone = `+91${phone}`;
+
+    // Check if user exists in database
+    const existingUser = db.prepare("SELECT id, phone, role, createdAt FROM users WHERE phone_canonical = ?").get(canonicalPhone);
+
+    let user;
+    if (existingUser) {
+      user = {
+        id: existingUser.id,
+        phone: existingUser.phone,
+        role: existingUser.role,
+        createdAt: existingUser.createdAt,
+        onboardingCompleted: false,
+      };
+      console.log("🔧 Found existing user:", user.id);
+    } else {
+      // Create a new user for development
+      const now = Date.now();
+      const userId = uuidv4();
+      const secret = generateSecret();
+      const { ciphertext, iv, tag } = encrypt(secret);
+
+      // Insert user
+      db.run("INSERT INTO users (id, phone, phone_canonical, phone_hash, phone_last4, role, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)", [
+        userId,
+        canonicalPhone,
+        canonicalPhone,
+        hashPhone(canonicalPhone),
+        getPhoneLast4(canonicalPhone),
+        "professional",
+        now
+      ]);
+
+      // Insert TOTP secret
+      db.run("INSERT INTO totp_secrets (userId, secret_enc, iv, tag, active, createdAt) VALUES (?, ?, ?, ?, ?, ?)", [
+        userId,
+        ciphertext,
+        iv,
+        tag,
+        1,
+        now
+      ]);
+
+      // Create VPI
+      db.run("INSERT INTO vpi (vpiId, userId, trustScore, level) VALUES (?, ?, ?, ?)", [
+        userId,
+        userId,
+        0,
+        1
+      ]);
+
+      // Generate UEID for new user
+      const { generateUEID } = require('./lib/ueid');
+      const ueid = generateUEID(userId);
+
+      // Update user with UEID
+      db.run("UPDATE users SET ecosystem_id = ?, can_receive_payments = 1 WHERE id = ?", [
+        ueid,
+        userId
+      ]);
+
+      user = {
+        id: userId,
+        phone: canonicalPhone,
+        role: "professional",
+        category: "professional",
+        createdAt: now,
+        onboardingCompleted: false,
+        ecosystemId: ueid,
+      };
+
+      console.log("🔧 Created new user for development:", user.id);
+    }
+
+    // Generate JWT tokens
+    const accessJwt = sign({ userId: user.id, vpiId: user.id, role: user.role });
+    const refreshJwt = sign({ userId: user.id, type: 'refresh' });
+
+    res.json({
+      ok: true,
+      accessJwt,
+      refreshJwt,
+      user: {
+        id: user.id,
+        phone: user.phone,
+        role: user.role,
+        category: user.role,
+        createdAt: new Date(user.createdAt).toISOString(),
+        onboardingCompleted: Boolean(user.onboardingCompleted),
+        organizations: []
+      }
+    });
+  } catch (error) {
+    console.error("❌ Simple login error:", error);
+    res.status(400).json({
+      ok: false,
+      error: error.message || "Login failed",
+    });
+  }
+});
+
+app.use((req, res) => {
+  if (!res.headersSent) {
+    res.status(404).json({ ok: false, error: "Route not found" });
+  }
+});
+
+// Start server with Socket.IO
+const server = require('http').createServer(app);
+const io = initializeSocket(server);
+
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`Vyaamik Samadhaan API listening on http://0.0.0.0:${PORT}`);
   console.log("Available endpoints:");
   console.log("  GET  / - Health check");
-  console.log("  POST /signup - Create user account");
-  console.log("  POST /totp/verify - Verify TOTP code");
-  console.log("  POST /login - Login with phone and TOTP");
-  console.log("  GET  /me - Get user profile (requires auth)");
-  console.log("  POST /ledger - Create ledger entry (requires auth)");
+  console.log("  GET  /api/v1/health - API v1 health check");
+  console.log("  POST /api/v1/auth/signup - Create user account");
+  console.log("  POST /api/v1/auth/totp/verify - Verify TOTP code");
+  console.log("  POST /api/v1/auth/login - Login with phone and TOTP");
+  console.log("  GET  /api/v1/auth/me - Get user profile (requires auth)");
+  console.log("  POST /api/v1/ledger - Create ledger entry (requires auth)");
   console.log(
-    "  POST /ledger/:id/ack - Acknowledge ledger entry (requires auth)",
+    "  POST /api/v1/ledger/:id/ack - Acknowledge ledger entry (requires auth)",
   );
-  console.log("  GET  /ledger - Get ledger entries (requires auth)");
-  console.log("  POST /loi - Create LOI (requires auth)");
-  console.log("  POST /loi/:id/sign - Sign LOI (requires auth)");
-  console.log("  GET  /loi/:id/pdf - Get LOI PDF (requires auth)");
+  console.log("  GET  /api/v1/ledger - Get ledger entries (requires auth)");
+  console.log("  POST /api/v1/loi - Create LOI (requires auth)");
+  console.log("  POST /api/v1/loi/:id/sign - Sign LOI (requires auth)");
+  console.log("  GET  /api/v1/loi/:id/pdf - Get LOI PDF (requires auth)");
   console.log(
-    "  POST /attendance/punch - Self punch attendance (requires auth)",
-  );
-  console.log(
-    "  POST /attendance/bulk - Bulk attendance submission (requires auth)",
+    "  POST /api/v1/attendance/punch - Self punch attendance (requires auth)",
   );
   console.log(
-    "  POST /approvals/:id/approve - Approve request (requires auth)",
+    "  POST /api/v1/attendance/bulk - Bulk attendance submission (requires auth)",
   );
+  console.log(
+    "  POST /api/v1/approvals/:id/approve - Approve request (requires auth)",
+  );
+  console.log("  GET  /api/v1/directory/resolve - Resolve UEID to profile (requires auth)");
+  console.log("  GET  /api/v1/directory/connections - List connections for mentions (requires auth)");
+  console.log("  POST /api/v1/chat/dm - Send direct message (requires auth)");
+  console.log("  GET  /api/v1/chat/history - Get chat history (requires auth)");
+  console.log("  GET  /api/v1/chat/unread - Get unread count (requires auth)");
+  console.log("  WebSocket: Real-time chat and notifications");
 });

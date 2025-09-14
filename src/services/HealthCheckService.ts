@@ -17,7 +17,7 @@ interface HealthStatus {
 
 class HealthCheckService {
   private static instance: HealthCheckService;
-  private intervalId: NodeJS.Timeout | null = null;
+  private intervalId: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout> | null = null;
   private config: HealthCheckConfig;
   private status: HealthStatus;
   private listeners: ((status: HealthStatus) => void)[] = [];
@@ -68,7 +68,7 @@ class HealthCheckService {
     try {
       console.log('🏥 Performing health check...');
       const isHealthy = await apiClient.healthCheck();
-      
+
       if (isHealthy) {
         this.status.isHealthy = true;
         this.status.consecutiveFailures = 0;
@@ -99,24 +99,24 @@ class HealthCheckService {
     }
 
     console.log('🏥 Starting health check service');
-    
+
     // Perform initial health check
     await this.performHealthCheck();
 
     // Schedule periodic health checks
     this.intervalId = setInterval(async () => {
       const isHealthy = await this.performHealthCheck();
-      
+
       // If unhealthy, use exponential backoff for next check
       if (!isHealthy) {
         const backoffDelay = this.calculateBackoffDelay();
         console.log(`⏰ Health check failed, using backoff delay: ${backoffDelay}ms`);
-        
+
         // Clear current interval and set new one with backoff
         if (this.intervalId) {
           clearInterval(this.intervalId);
         }
-        
+
         this.intervalId = setTimeout(() => {
           this.start(); // Restart with normal interval
         }, backoffDelay);

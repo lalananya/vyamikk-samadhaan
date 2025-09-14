@@ -1,0 +1,22 @@
+id: payroll
+route: /payroll
+title: Payroll
+roles: [Owner, Admin]
+entities:
+  - name: PayrollRow
+    fields:
+      - { key: "userId", type: "string", required: true }
+      - { key: "hours", type: "number", required: true }
+      - { key: "otHours", type: "number", required: true }
+      - { key: "rate", type: "money", required: true }
+      - { key: "deductions", type: "money", required: false }
+api:
+  base: /api/v1/payroll
+  endpoints:
+    - { method: POST, path: /compute, body: { periodFrom, periodTo }, auth: true }
+    - { method: GET,  path: /sheet, query: { periodFrom, periodTo }, auth: true }
+ui:
+  features: [stickyTotals, exportXLSX, roundTo5Paise, warningsNoMixOTPresent]
+copy:
+  en: { warning: "OT and Present must not be mixed" }
+  hi: { warning: "ओटी और प्रेज़ेंट को एक कॉलम में न मिलाएँ" }

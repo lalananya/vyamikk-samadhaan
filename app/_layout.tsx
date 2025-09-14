@@ -1,6 +1,11 @@
-// app/_layout.tsx
-import { Stack } from "expo-router";
+import { StatusBar } from 'expo-status-bar';
+import RootRouterGuard from '../src/guards/RootRouterGuard';
 
 export default function RootLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <>
+      <StatusBar style="auto" />
+      <RootRouterGuard />
+    </>
+  );
 }

@@ -1,0 +1,354 @@
+import React, { useState, useEffect } from 'react';
+import {
+View,
+Text,
+StyleSheet,
+TouchableOpacity,
+FlatList,
+TextInput,
+Alert,
+RefreshControl,
+ActivityIndicator,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
+import { use<%= pascalCase(spec.id) %>API } from '../../api/<%= kebabCase(spec.id) %>';
+        import { useI18n } from '../../hooks/useI18n';
+        import { roundTo5Paise } from '../../utils/formatting';
+
+        export default function <%= pascalCase(spec.id) %>Screen() {
+            const router = useRouter();
+            const { t } = useI18n();
+            const [refreshing, setRefreshing] = useState(false);
+            const [loading, setLoading] = useState(false);
+
+            const {
+            data,
+            error,
+            isLoading,
+            refetch,
+            create,
+            update,
+            delete: deleteItem
+            } = use<%= pascalCase(spec.id) %>API();
+
+                const handleRefresh = async () => {
+                setRefreshing(true);
+                await refetch();
+                setRefreshing(false);
+                };
+
+                const handleCreate = async (item: any) => {
+                try {
+                setLoading(true);
+                await create(item);
+                await refetch();
+                } catch (error) {
+                Alert.alert(t('error'), error.message);
+                } finally {
+                setLoading(false);
+                }
+                };
+
+                const handleUpdate = async (id: string, item: any) => {
+                try {
+                setLoading(true);
+                await update(id, item);
+                await refetch();
+                } catch (error) {
+                Alert.alert(t('error'), error.message);
+                } finally {
+                setLoading(false);
+                }
+                };
+
+                const handleDelete = async (id: string) => {
+                Alert.alert(
+                t('confirm_delete'),
+                t('confirm_delete_message'),
+                [
+                { text: t('cancel'), style: 'cancel' },
+                {
+                text: t('delete'),
+                style: 'destructive',
+                onPress: async () => {
+                try {
+                setLoading(true);
+                await deleteItem(id);
+                await refetch();
+                } catch (error) {
+                Alert.alert(t('error'), error.message);
+                } finally {
+                setLoading(false);
+                }
+                }
+                }
+                ]
+                );
+                };
+
+                const renderEmptyState = () => (
+                <View style={styles.emptyState}>
+                    <Ionicons name="<%= getEmptyStateIcon(spec) %>" size={64} color="#6B7280" />
+                    <Text style={styles.emptyStateTitle}>
+                        {t('<%= kebabCase(spec.id) %>.empty_state.title')}
+                    </Text>
+                    <Text style={styles.emptyStateText}>
+                        {t('<%= kebabCase(spec.id) %>.empty_state.message')}
+                    </Text>
+                    <TouchableOpacity style={styles.emptyStateButton} onPress={()=> handleCreate({})}
+                        >
+                        <Text style={styles.emptyStateButtonText}>
+                            {t('<%= kebabCase(spec.id) %>.empty_state.action')}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+                );
+
+                const renderItem = ({ item }: { item: any }) => (
+                <View style={styles.item}>
+                    <View style={styles.itemContent}>
+                        <Text style={styles.itemTitle}>
+                            {item.name || item.id || t('untitled')}
+                        </Text>
+                        <Text style={styles.itemSubtitle}>
+                            {formatItemSubtitle(item)}
+                        </Text>
+                    </View>
+                    <View style={styles.itemActions}>
+                        <TouchableOpacity style={styles.actionButton} onPress={()=> handleUpdate(item.id, item)}
+                            >
+                            <Ionicons name="pencil" size={20} color="#4F46E5" />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.actionButton} onPress={()=> handleDelete(item.id)}
+                            >
+                            <Ionicons name="trash" size={20} color="#EF4444" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+                );
+
+                if (isLoading && !data) {
+                return (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#4F46E5" />
+                    <Text style={styles.loadingText}>{t('loading')}</Text>
+                </View>
+                );
+                }
+
+                return (
+                <View style={styles.container}>
+                    <StatusBar style="light" backgroundColor="#000000" />
+
+                    {/* Header */}
+                    <View style={styles.header}>
+                        <TouchableOpacity onPress={()=> router.back()} style={styles.backButton}>
+                            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                        </TouchableOpacity>
+                        <Text style={styles.headerTitle}>{t('<%= kebabCase(spec.id) %>.title')}</Text>
+                        <TouchableOpacity style={styles.addButton} onPress={()=> handleCreate({})}
+                            >
+                            <Ionicons name="add" size={24} color="#FFFFFF" />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Content */}
+                    <View style={styles.content}>
+                        {error && (
+                        <View style={styles.errorBanner}>
+                            <Ionicons name="warning" size={20} color="#EF4444" />
+                            <Text style={styles.errorText}>{error.message}</Text>
+                            <TouchableOpacity onPress={handleRefresh}>
+                                <Text style={styles.retryText}>{t('retry')}</Text>
+                            </TouchableOpacity>
+                        </View>
+                        )}
+
+                        {data && data.length === 0 ? (
+                        renderEmptyState()
+                        ) : (
+                        <FlatList data={data || []} renderItem={renderItem} keyExtractor={(item)=> item.id}
+                            refreshControl={
+                            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#4F46E5']}
+                                tintColor="#4F46E5" />
+                            }
+                            contentContainerStyle={styles.list}
+                            />
+                            )}
+                    </View>
+
+                    {loading && (
+                    <View style={styles.loadingOverlay}>
+                        <ActivityIndicator size="large" color="#FFFFFF" />
+                    </View>
+                    )}
+                </View>
+                );
+                }
+
+                const styles = StyleSheet.create({
+                container: {
+                flex: 1,
+                backgroundColor: '#000000',
+                },
+                header: {
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                borderBottomWidth: 1,
+                borderBottomColor: '#1F2937',
+                },
+                backButton: {
+                padding: 8,
+                },
+                headerTitle: {
+                fontSize: 18,
+                fontWeight: '600',
+                color: '#FFFFFF',
+                },
+                addButton: {
+                padding: 8,
+                },
+                content: {
+                flex: 1,
+                },
+                errorBanner: {
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: '#FEF2F2',
+                padding: 12,
+                margin: 16,
+                borderRadius: 8,
+                },
+                errorText: {
+                flex: 1,
+                color: '#EF4444',
+                marginLeft: 8,
+                },
+                retryText: {
+                color: '#4F46E5',
+                fontWeight: '600',
+                },
+                list: {
+                padding: 16,
+                },
+                item: {
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: '#1F2937',
+                padding: 16,
+                marginBottom: 8,
+                borderRadius: 8,
+                },
+                itemContent: {
+                flex: 1,
+                },
+                itemTitle: {
+                fontSize: 16,
+                fontWeight: '600',
+                color: '#FFFFFF',
+                marginBottom: 4,
+                },
+                itemSubtitle: {
+                fontSize: 14,
+                color: '#9CA3AF',
+                },
+                itemActions: {
+                flexDirection: 'row',
+                },
+                actionButton: {
+                padding: 8,
+                marginLeft: 8,
+                },
+                emptyState: {
+                flex: 1,
+                justifyContent: 'center',
+                alignItems: 'center',
+                padding: 32,
+                },
+                emptyStateTitle: {
+                fontSize: 20,
+                fontWeight: '600',
+                color: '#FFFFFF',
+                marginTop: 16,
+                marginBottom: 8,
+                },
+                emptyStateText: {
+                fontSize: 16,
+                color: '#9CA3AF',
+                textAlign: 'center',
+                lineHeight: 24,
+                marginBottom: 24,
+                },
+                emptyStateButton: {
+                backgroundColor: '#4F46E5',
+                paddingHorizontal: 24,
+                paddingVertical: 12,
+                borderRadius: 8,
+                },
+                emptyStateButtonText: {
+                color: '#FFFFFF',
+                fontWeight: '600',
+                },
+                loadingContainer: {
+                flex: 1,
+                justifyContent: 'center',
+                alignItems: 'center',
+                backgroundColor: '#000000',
+                },
+                loadingText: {
+                color: '#FFFFFF',
+                marginTop: 16,
+                },
+                loadingOverlay: {
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                justifyContent: 'center',
+                alignItems: 'center',
+                },
+                });
+
+                // Helper functions
+                function formatItemSubtitle(item: any): string {
+                // Format based on entity fields
+                <% if (spec.entities && spec.entities[0]) { %>
+                    <% const entity=spec.entities[0]; %>
+                        <% entity.fields.forEach(field=> { %>
+                            <% if (field.type==='money' ) { %>
+                                if (item.<%= field.key %>) {
+                                    return new Intl.NumberFormat('en-IN', {
+                                    style: 'currency',
+                                    currency: 'INR'
+                                    }).format(item.<%= field.key %>);
+                                        }
+                                        <% } else if (field.type==='datetime' ) { %>
+                                            if (item.<%= field.key %>) {
+                                                return new Date(item.<%= field.key %>).toLocaleString('en-IN');
+                                                    }
+                                                    <% } %>
+                                                        <% }); %>
+                                                            <% } %>
+                                                                return item.description || item.note || '';
+                                                                }
+
+                                                                function getEmptyStateIcon(spec: any): string {
+                                                                const iconMap: Record<string, string> = {
+                                                                    'attendance': 'time',
+                                                                    'shifts': 'calendar',
+                                                                    'payroll': 'card',
+                                                                    'directory': 'people',
+                                                                    'payments': 'wallet',
+                                                                    'chat': 'chatbubbles',
+                                                                    'settings': 'settings',
+                                                                    'outages': 'flash'
+                                                                    };
+                                                                    return iconMap[spec.id] || 'document';
+                                                                    }

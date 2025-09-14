@@ -1,0 +1,166 @@
+// Organizations & RBAC Schema
+// This extends the existing schema with organization management
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  type      OrgType  @default(msme)
+  industry  String?
+  address   String?
+  city      String?
+  state     String?
+  pincode   String?
+  phone     String?
+  email     String?
+  website   String?
+  logo      String?
+  
+  // Settings as JSON
+  settings  Json     @default("{}")
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  members   Member[]
+  roles     Role[]
+  invites   Invite[]
+  
+  @@map("organizations")
+}
+
+model Member {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  roleId         String
+  status         MemberStatus @default(pending)
+  joinedAt       DateTime     @default(now())
+  lastActiveAt   DateTime?
+  invitedBy      String?
+  
+  // Permissions as JSON array
+  permissions    Json         @default("[]")
+  
+  // Additional metadata
+  metadata       Json         @default("{}")
+  
+  // Timestamps
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  
+  @@unique([organizationId, userId])
+  @@map("members")
+}
+
+model Role {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  isSystem       Boolean  @default(false)
+  level          Int      @default(50) // Higher = more permissions
+  
+  // Timestamps
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members        Member[]
+  permissions    RolePermission[]
+  
+  @@unique([organizationId, name])
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  resource    String
+  action      String
+  scope       PermissionScope @default(organization)
+  description String?
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  roles       RolePermission[]
+  
+  @@unique([resource, action, scope])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  permissionId String
+  
+  // Relations
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Invite {
+  id             String      @id @default(cuid())
+  organizationId String
+  email          String
+  phone          String?
+  roleId         String
+  invitedBy      String
+  token          String      @unique
+  expiresAt      DateTime
+  status         InviteStatus @default(pending)
+  acceptedAt     DateTime?
+  
+  // Additional metadata
+  metadata       Json        @default("{}")
+  
+  // Timestamps
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  
+  @@map("invites")
+}
+
+// Enums
+enum OrgType {
+  msme
+  enterprise
+  ngo
+}
+
+enum MemberStatus {
+  active
+  inactive
+  pending
+  suspended
+}
+
+enum PermissionScope {
+  organization
+  department
+  self
+}
+
+enum InviteStatus {
+  pending
+  accepted
+  expired
+  revoked
+}

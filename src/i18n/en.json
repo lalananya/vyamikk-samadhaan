@@ -1,0 +1,130 @@
+{
+    "profile-wizard": {
+        "title": "Complete Profile",
+        "steps": {
+            "basics": "Tell us the basics",
+            "preferences": "Your preferences",
+            "compliance": "Verify your identity (optional)",
+            "review": "Review & confirm"
+        },
+        "basics": {
+            "title": "Tell us the basics",
+            "subtitle": "This helps us tailor your tools",
+            "fullName": "Full Name *",
+            "pin": "4-Digit PIN",
+            "pinHelper": "This PIN will be visible in your UEID (VS-PIN-XXXX-XXXX)",
+            "pinDisclaimer": "⚠️ Do not use your ATM, bank, or other sensitive PINs. Choose any 4-digit favorite number.",
+            "email": "Email",
+            "role": "Role *",
+            "roleHelp": "This helps us tailor your tools"
+        },
+        "preferences": {
+            "title": "Your preferences",
+            "subtitle": "Control your privacy and notifications",
+            "hidePhone": "Hide phone number",
+            "hidePhoneDesc": "Keep your phone private from others",
+            "hideEmail": "Hide email address",
+            "hideEmailDesc": "Keep your email private from others",
+            "allowLocation": "Allow location access",
+            "allowLocationDesc": "Required for attendance & shift features",
+            "allowNotifications": "Allow notifications",
+            "allowNotificationsDesc": "Get updates about your work and payments"
+        },
+        "compliance": {
+            "title": "Verify your identity (optional)",
+            "subtitle": "Help us verify your identity for better security",
+            "privacyTitle": "Your Privacy is Protected",
+            "privacyDesc": "We use bank-level encryption to protect your personal information",
+            "aadhaar": "Aadhaar Number",
+            "aadhaarPlaceholder": "12-digit Aadhaar number",
+            "pan": "PAN Number",
+            "panPlaceholder": "10-character PAN number"
+        },
+        "review": {
+            "title": "Review & confirm",
+            "subtitle": "Looks good? Let's finish up",
+            "basics": "Basics",
+            "preferences": "Preferences",
+            "compliance": "Compliance",
+            "name": "Name",
+            "pin": "4-Digit PIN",
+            "ueid": "Your UEID",
+            "email": "Email",
+            "role": "Role",
+            "hidePhone": "Hide phone",
+            "hideEmail": "Hide email",
+            "locationAccess": "Location access",
+            "notifications": "Notifications",
+            "aadhaar": "Aadhaar",
+            "pan": "PAN",
+            "notProvided": "Not provided",
+            "yes": "Yes",
+            "no": "No",
+            "allowed": "Allowed",
+            "denied": "Denied",
+            "enabled": "Enabled",
+            "disabled": "Disabled"
+        },
+        "actions": {
+            "continue": "Continue",
+            "finish": "Finish",
+            "saveAndExit": "Save & Exit",
+            "back": "Back"
+        },
+        "roles": {
+            "company": "Company/Org",
+            "professional": "Professional",
+            "employee": "Employee"
+        },
+        "validation": {
+            "requiredFields": "Required fields",
+            "fillRequired": "Please fill in all required fields"
+        }
+    },
+    "shift-planner": {
+        "title": "Shift Planner",
+        "empty_state": {
+            "title": "No items yet",
+            "message": "Get started by adding your first item",
+            "action": "Add Item"
+        },
+        "shift": {
+            "name": "Name",
+            "start": "Start",
+            "end": "End",
+            "workers": "Workers",
+            "create": "Create Shift",
+            "edit": "Edit Shift",
+            "delete": "Delete Shift",
+            "confirm_delete": "Delete Shift?",
+            "confirm_delete_message": "This action cannot be undone."
+        },
+        "actions": {
+            "create": "Create",
+            "edit": "Edit",
+            "delete": "Delete",
+            "save": "Save",
+            "cancel": "Cancel",
+            "retry": "Retry"
+        },
+        "errors": {
+            "create_failed": "Failed to create item",
+            "update_failed": "Failed to update item",
+            "delete_failed": "Failed to delete item",
+            "load_failed": "Failed to load data"
+        }
+    },
+    "common": {
+        "loading": "Loading...",
+        "error": "Error",
+        "success": "Success",
+        "confirm": "Confirm",
+        "cancel": "Cancel",
+        "save": "Save",
+        "delete": "Delete",
+        "edit": "Edit",
+        "add": "Add",
+        "retry": "Retry",
+        "untitled": "Untitled"
+    }
+}

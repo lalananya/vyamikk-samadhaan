@@ -1,0 +1,23 @@
+id: attendance
+route: /attendance
+title: Attendance
+roles: [Owner, Admin, Manager, Worker]
+entities:
+  - name: Punch
+    fields:
+      - { key: "ts", type: "datetime", required: true }
+      - { key: "type", type: "enum", values: ["IN","OUT"], required: true }
+      - { key: "note", type: "string", required: false, max: 200 }
+api:
+  base: /api/v1/attendance
+  endpoints:
+    - { method: POST, path: /punch, body: { ts, type, note }, auth: true }
+    - { method: GET,  path: /today, query: {}, auth: true }
+    - { method: GET,  path: /summary, query: { from, to, userId }, auth: true }
+ui:
+  features: [bigPunchButtons, shiftBadge, offlineQueue, debounce]
+  emptyState: { en: "No punches yet", hi: "अभी कोई पन्च नहीं" }
+calculation:
+  rounding: "roundTo5Paise"
+  constraints:
+    - "Do not mix OT & Present totals in one column"

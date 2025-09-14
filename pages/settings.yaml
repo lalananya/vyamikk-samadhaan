@@ -1,0 +1,6 @@
+id: settings
+route: /settings
+title: Settings
+roles: [Owner, Admin, Manager, Worker]
+ui:
+  features: [languageToggle, darkMode, notifications, dataSaver]

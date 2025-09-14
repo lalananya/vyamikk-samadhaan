@@ -1,0 +1,111 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  phone       String   @unique
+  countryCode String   @default("+91")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  sessions    Session[]
+  userOrgRoles UserOrgRole[]
+
+  @@map("users")
+}
+
+model Otp {
+  id        String   @id @default(uuid())
+  phone     String
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  purpose   OtpPurpose @default(LOGIN)
+  createdAt DateTime @default(now())
+
+  @@index([phone, expiresAt])
+  @@index([expiresAt])
+  @@map("otps")
+}
+
+model Session {
+  id            String   @id @default(uuid())
+  userId        String
+  refreshHash   String
+  expiresAt     DateTime
+  deviceModel   String?
+  devicePlatform String?
+  appVersion    String?
+  ip            String?
+  userAgent     String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  lastUsedAt    DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
+  @@index([refreshHash])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Organisation {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  userOrgRoles UserOrgRole[]
+
+  @@map("organisations")
+}
+
+model UserOrgRole {
+  userId String
+  orgId  String
+  role   UserRole
+
+  // Relations
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org  Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@id([userId, orgId])
+  @@map("user_org_roles")
+}
+
+model RateEvent {
+  id          String   @id @default(uuid())
+  key         String
+  windowStart DateTime
+  count       Int      @default(1)
+  createdAt   DateTime @default(now())
+
+  @@unique([key, windowStart])
+  @@index([key, windowStart])
+  @@map("rate_events")
+}
+
+enum OtpPurpose {
+  LOGIN
+  VERIFY_PHONE
+  RESET_PASSWORD
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+}

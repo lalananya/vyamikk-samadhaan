@@ -1,0 +1,136 @@
+[
+    {
+        "id": "urn:msme:entity:skill:welding",
+        "type": "skill",
+        "canonicalName": "Welding",
+        "aliases": [
+            {
+                "id": "alias-welding-1",
+                "text": "Welding",
+                "language": "en",
+                "type": "exact",
+                "confidence": 1.0,
+                "isApproved": true
+            },
+            {
+                "id": "alias-welding-2",
+                "text": "वेल्डिंग",
+                "language": "hi",
+                "type": "translation",
+                "confidence": 0.95,
+                "isApproved": true
+            },
+            {
+                "id": "alias-welding-3",
+                "text": "Metal Joining",
+                "language": "en",
+                "type": "synonym",
+                "confidence": 0.85,
+                "isApproved": true
+            }
+        ],
+        "metadata": {
+            "description": "Metal welding and joining skills",
+            "category": "Technical",
+            "tags": [
+                "metalwork",
+                "construction",
+                "repair"
+            ],
+            "isActive": true,
+            "usageCount": 0
+        }
+    },
+    {
+        "id": "urn:msme:entity:skill:machining",
+        "type": "skill",
+        "canonicalName": "Machining",
+        "aliases": [
+            {
+                "id": "alias-machining-1",
+                "text": "Machining",
+                "language": "en",
+                "type": "exact",
+                "confidence": 1.0,
+                "isApproved": true
+            },
+            {
+                "id": "alias-machining-2",
+                "text": "मशीनिंग",
+                "language": "hi",
+                "type": "translation",
+                "confidence": 0.95,
+                "isApproved": true
+            },
+            {
+                "id": "alias-machining-3",
+                "text": "CNC Machining",
+                "language": "en",
+                "type": "synonym",
+                "confidence": 0.9,
+                "isApproved": true
+            }
+        ],
+        "metadata": {
+            "description": "Machine operation and CNC machining skills",
+            "category": "Technical",
+            "tags": [
+                "cnc",
+                "lathe",
+                "milling"
+            ],
+            "isActive": true,
+            "usageCount": 0
+        }
+    },
+    {
+        "id": "urn:msme:entity:skill:quality_control",
+        "type": "skill",
+        "canonicalName": "Quality Control",
+        "aliases": [
+            {
+                "id": "alias-qc-1",
+                "text": "Quality Control",
+                "language": "en",
+                "type": "exact",
+                "confidence": 1.0,
+                "isApproved": true
+            },
+            {
+                "id": "alias-qc-2",
+                "text": "गुणवत्ता नियंत्रण",
+                "language": "hi",
+                "type": "translation",
+                "confidence": 0.95,
+                "isApproved": true
+            },
+            {
+                "id": "alias-qc-3",
+                "text": "QC",
+                "language": "en",
+                "type": "abbreviation",
+                "confidence": 0.8,
+                "isApproved": true
+            },
+            {
+                "id": "alias-qc-4",
+                "text": "Quality Assurance",
+                "language": "en",
+                "type": "synonym",
+                "confidence": 0.9,
+                "isApproved": true
+            }
+        ],
+        "metadata": {
+            "description": "Quality control and assurance skills",
+            "category": "Technical",
+            "tags": [
+                "inspection",
+                "testing",
+                "standards"
+            ],
+            "isActive": true,
+            "usageCount": 0
+        }
+    }
+]

@@ -1,0 +1,136 @@
+[
+    {
+        "id": "urn:msme:entity:location:delhi",
+        "type": "location",
+        "canonicalName": "Delhi",
+        "aliases": [
+            {
+                "id": "alias-delhi-1",
+                "text": "Delhi",
+                "language": "en",
+                "type": "exact",
+                "confidence": 1.0,
+                "isApproved": true
+            },
+            {
+                "id": "alias-delhi-2",
+                "text": "दिल्ली",
+                "language": "hi",
+                "type": "translation",
+                "confidence": 0.95,
+                "isApproved": true
+            },
+            {
+                "id": "alias-delhi-3",
+                "text": "New Delhi",
+                "language": "en",
+                "type": "synonym",
+                "confidence": 0.9,
+                "isApproved": true
+            },
+            {
+                "id": "alias-delhi-4",
+                "text": "NCR",
+                "language": "en",
+                "type": "abbreviation",
+                "confidence": 0.7,
+                "isApproved": true
+            }
+        ],
+        "metadata": {
+            "description": "National Capital Territory of Delhi",
+            "category": "Metropolitan",
+            "tags": [
+                "capital",
+                "ncr",
+                "north"
+            ],
+            "isActive": true,
+            "usageCount": 0
+        }
+    },
+    {
+        "id": "urn:msme:entity:location:mumbai",
+        "type": "location",
+        "canonicalName": "Mumbai",
+        "aliases": [
+            {
+                "id": "alias-mumbai-1",
+                "text": "Mumbai",
+                "language": "en",
+                "type": "exact",
+                "confidence": 1.0,
+                "isApproved": true
+            },
+            {
+                "id": "alias-mumbai-2",
+                "text": "मुंबई",
+                "language": "hi",
+                "type": "translation",
+                "confidence": 0.95,
+                "isApproved": true
+            },
+            {
+                "id": "alias-mumbai-3",
+                "text": "Bombay",
+                "language": "en",
+                "type": "synonym",
+                "confidence": 0.8,
+                "isApproved": true
+            }
+        ],
+        "metadata": {
+            "description": "Financial capital of India",
+            "category": "Metropolitan",
+            "tags": [
+                "financial",
+                "commercial",
+                "west"
+            ],
+            "isActive": true,
+            "usageCount": 0
+        }
+    },
+    {
+        "id": "urn:msme:entity:location:bangalore",
+        "type": "location",
+        "canonicalName": "Bangalore",
+        "aliases": [
+            {
+                "id": "alias-bangalore-1",
+                "text": "Bangalore",
+                "language": "en",
+                "type": "exact",
+                "confidence": 1.0,
+                "isApproved": true
+            },
+            {
+                "id": "alias-bangalore-2",
+                "text": "बैंगलोर",
+                "language": "hi",
+                "type": "translation",
+                "confidence": 0.95,
+                "isApproved": true
+            },
+            {
+                "id": "alias-bangalore-3",
+                "text": "Bengaluru",
+                "language": "en",
+                "type": "synonym",
+                "confidence": 0.9,
+                "isApproved": true
+            }
+        ],
+        "metadata": {
+            "description": "Silicon Valley of India",
+            "category": "Metropolitan",
+            "tags": [
+                "tech",
+                "it",
+                "south"
+            ],
+            "isActive": true,
+            "usageCount": 0
+        }
+    }
+]

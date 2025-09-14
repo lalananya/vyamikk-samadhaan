@@ -1,0 +1,21 @@
+id: shift-planner
+route: /shifts
+title: Shift Planner
+roles: [Owner, Admin, Manager]
+entities:
+  - name: Shift
+    fields:
+      - { key: "name", type: "string", required: true }
+      - { key: "start", type: "time", required: true }
+      - { key: "end", type: "time", required: true }
+      - { key: "workers", type: "array<string>", required: true }
+api:
+  base: /api/v1/shifts
+  endpoints:
+    - { method: POST, path: /, body: { name, start, end, workers }, auth: true }
+    - { method: GET,  path: /schedule, query: { date }, auth: true }
+    - { method: POST, path: /assign, body: { workerId, shiftId, date }, auth: true }
+ui:
+  features: [calendarGrid, dragAssign, warnOverlaps, exportCSV]
+hints:
+  - "Respect Manoj = night shift only; support rule-based assignment"

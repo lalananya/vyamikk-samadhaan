@@ -1,0 +1,18 @@
+id: chat
+route: /chat
+title: Chat
+roles: [Owner, Admin, Manager, Worker]
+entities:
+  - name: Message
+    fields:
+      - { key: "to", type: "string", required: true }
+      - { key: "text", type: "string", required: true, max: 2000 }
+api:
+  base: /api/v1/chat
+  endpoints:
+    - { method: POST, path: /dm, body: { to, text }, auth: true }
+    - { method: GET,  path: /history, query: { peer, cursor }, auth: true }
+socket:
+  room: "dm:<sorted(userA,userB)>"
+ui:
+  features: [mentionUEID, suggestConnections, rateLimitBanner]
